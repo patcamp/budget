@@ -21,7 +21,7 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const numAmount = parseFloat(amount);
-    if (!categoryId || isNaN(numAmount) || numAmount <= 0) return;
+    if (!categoryId || isNaN(numAmount) || numAmount === 0) return;
 
     setSubmitting(true);
     const { error } = await supabase.from("expenses").insert({
@@ -85,7 +85,6 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
         <input
           type="number"
           step="0.01"
-          min="0"
           placeholder="0.00"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
