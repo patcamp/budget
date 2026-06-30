@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { PayPeriod, Category, Expense } from "@/lib/types";
 import Dashboard from "@/components/Dashboard";
+import Overview from "@/components/Overview";
 
 export default function Home() {
   const [payPeriods, setPayPeriods] = useState<PayPeriod[]>([]);
@@ -11,6 +12,7 @@ export default function Home() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"period" | "overview">("period");
 
   const loadAll = useCallback(async () => {
     setError(null);
@@ -60,11 +62,40 @@ export default function Home() {
   }
 
   return (
-    <Dashboard
-      payPeriods={payPeriods}
-      categories={categories}
-      expenses={expenses}
-      onRefresh={loadAll}
-    />
+    <>
+      <div style={{ display: "flex", background: "#080B12", borderBottom: "1px solid #1E293B" }}>
+        {[
+          { key: "period" as const, label: "This Period" },
+          { key: "overview" as const, label: "Overview" },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setView(tab.key)}
+            style={{
+              padding: "12px 20px",
+              border: "none",
+              borderBottom: `2px solid ${view === tab.key ? "#3B82F6" : "transparent"}`,
+              background: "transparent",
+              color: view === tab.key ? "#F1F5F9" : "#64748B",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {view === "period" ? (
+        <Dashboard
+          payPeriods={payPeriods}
+          categories={categories}
+          expenses={expenses}
+          onRefresh={loadAll}
+        />
+      ) : (
+        <Overview payPeriods={payPeriods} categories={categories} expenses={expenses} />
+      )}
+    </>
   );
 }
