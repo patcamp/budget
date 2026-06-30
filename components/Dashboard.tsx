@@ -7,6 +7,7 @@ import { PayPeriod, Category, Expense } from "@/lib/types";
 import AddExpenseForm from "./AddExpenseForm";
 import CategoryTile from "./CategoryTile";
 import PayPeriodPicker from "./PayPeriodPicker";
+import Statement from "./Statement";
 
 interface Props {
   payPeriods: PayPeriod[];
@@ -245,6 +246,19 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
                 onAdded={onRefresh}
               />
             )}
+
+            {/* STATEMENT */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              Statement
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <Statement
+                expenses={periodExpenses}
+                categories={categories}
+                locked={isLocked}
+                onChanged={onRefresh}
+              />
+            </div>
 
             {/* BAR CHART */}
             <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 14, padding: "20px 12px 12px", marginBottom: 20, marginTop: 20 }}>
