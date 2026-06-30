@@ -87,7 +87,13 @@ Each pay period is a row in `pay_periods` with a start/end date and a snapshot o
 **"+ New Pay Period"** creates the next period automatically, defaulting to 14 days after the current one ends. Edit the dates directly in Supabase's Table Editor if your semi-monthly cycle doesn't land on exact 14-day boundaries (Booz Allen's semi-monthly periods are usually 1st–15th and 16th–end of month, which varies between 13–16 days).
 
 ### Logging expenses
-While a period is **unlocked**, use the "Add Expense" form to log purchases against a category as they happen — amount, category, optional description, date. They show up immediately in that category's tile and in the bar chart.
+While a period is **unlocked**, use the "Add Expense" form to log purchases against a category as they happen — amount, category, optional description, date. They show up immediately in the statement, the category tile, and the bar chart.
+
+### Statement
+Below the "Add Expense" form, the **Statement** lists every transaction in the active period chronologically (newest first), grouped by day with a per-day subtotal, and filterable down to a single category. This is the place to scan or delete recent entries without hunting through the per-category tiles; deleting here behaves the same as deleting from a tile and is disabled once the period is locked.
+
+### Overview tab
+The **Overview** tab (next to "This Period" at the top of the page) switches to a read-only, multi-period view: pick which pay periods to include (presets for Last 3 / Last 6 / All Time, or toggle individual periods), and it shows averages for paycheck/actual spend/surplus, an income-vs-actual trend chart across the selected periods, and how often each category ran over budget. No editing happens here — it's for spotting trends across periods, not logging expenses.
 
 ### Locking a period
 Once a pay period is over and you're confident the numbers are final, click **Lock This Period**. This:
@@ -109,12 +115,15 @@ Categories live in the `categories` table in Supabase. To change a budget amount
 budget-app/
 ├── app/
 │   ├── layout.tsx          # root layout
-│   ├── page.tsx            # data fetching, passes to Dashboard
+│   ├── page.tsx            # data fetching, "This Period" / "Overview" tab toggle
 │   └── globals.css
 ├── components/
-│   ├── Dashboard.tsx        # main view: summary cards, chart, lock controls
-│   ├── PayPeriodPicker.tsx  # period selector pills + "new period" button
+│   ├── Dashboard.tsx        # "This Period" view: summary cards, statement, chart, lock controls
+│   ├── Overview.tsx         # "Overview" view: multi-period averages, trend chart, read-only
+│   ├── PayPeriodPicker.tsx  # single-period selector pills + "new period" button (Dashboard)
+│   ├── PeriodFilter.tsx     # multi-period selector + presets (Overview)
 │   ├── AddExpenseForm.tsx   # inline expense entry form
+│   ├── Statement.tsx        # chronological, filterable transaction list for the active period
 │   └── CategoryTile.tsx     # per-category card with expandable expense list
 ├── lib/
 │   ├── supabase.ts          # Supabase client
@@ -124,6 +133,8 @@ budget-app/
 ├── .env.local.example
 └── package.json
 ```
+
+Each directory above also has its own `CLAUDE.md` with more detail on conventions and data flow — start there if you're making non-trivial changes.
 
 ---
 
