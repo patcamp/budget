@@ -47,10 +47,10 @@ export default function Overview({ payPeriods, categories, expenses }: Props) {
     });
   }, [selectedPeriods, expenses]);
 
-  const n = periodStats.length;
-  const avgIncome = n ? periodStats.reduce((s, p) => s + p.income, 0) / n : 0;
-  const avgActual = n ? periodStats.reduce((s, p) => s + p.actual, 0) / n : 0;
-  const avgSurplus = n ? periodStats.reduce((s, p) => s + p.surplus, 0) / n : 0;
+  const selectedCount = periodStats.length;
+  const avgIncome = selectedCount ? periodStats.reduce((sum, p) => sum + p.income, 0) / selectedCount : 0;
+  const avgActual = selectedCount ? periodStats.reduce((sum, p) => sum + p.actual, 0) / selectedCount : 0;
+  const avgSurplus = selectedCount ? periodStats.reduce((sum, p) => sum + p.surplus, 0) / selectedCount : 0;
 
   const trendData = periodStats.map((p) => ({
     name: formatRange(p.period),
@@ -60,18 +60,18 @@ export default function Overview({ payPeriods, categories, expenses }: Props) {
 
   const overFrequency = useMemo(() => {
     return categories
-      .map((c) => {
-        const overCount = periodStats.filter((p) => {
-          const catActual = expenses
-            .filter((e) => e.pay_period_id === p.period.id && e.category_id === c.id)
-            .reduce((s, e) => s + Number(e.amount), 0);
-          return catActual > Number(c.budget_per_period);
+      .map((category) => {
+        const overCount = periodStats.filter((stat) => {
+          const categoryActual = expenses
+            .filter((e) => e.pay_period_id === stat.period.id && e.category_id === category.id)
+            .reduce((sum, e) => sum + Number(e.amount), 0);
+          return categoryActual > Number(category.budget_per_period);
         }).length;
-        const pct = n ? Math.round((overCount / n) * 100) : 0;
-        return { category: c, overCount, pct };
+        const overPercent = selectedCount ? Math.round((overCount / selectedCount) * 100) : 0;
+        return { category, overCount, pct: overPercent };
       })
       .sort((a, b) => b.pct - a.pct || a.category.sort_order - b.category.sort_order);
-  }, [categories, periodStats, expenses, n]);
+  }, [categories, periodStats, expenses, selectedCount]);
 
   return (
     <div style={{ minHeight: "100vh", paddingBottom: 60 }}>
@@ -101,18 +101,18 @@ export default function Overview({ payPeriods, categories, expenses }: Props) {
           </div>
         )}
 
-        {sortedPeriods.length > 0 && n === 0 && (
+        {sortedPeriods.length > 0 && selectedCount === 0 && (
           <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 12, padding: 24, textAlign: "center", color: "#64748B" }}>
             Select at least one pay period above.
           </div>
         )}
 
-        {n > 0 && (
+        {selectedCount > 0 && (
           <>
             {/* SUMMARY CARDS */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
               {[
-                { label: "Periods Selected", val: String(n), color: "#F1F5F9", border: "#1E293B" },
+                { label: "Periods Selected", val: String(selectedCount), color: "#F1F5F9", border: "#1E293B" },
                 { label: "Avg Paycheck", val: fmt(avgIncome), color: "#F1F5F9", border: "#1E293B" },
                 { label: "Avg Actual Spend", val: fmt(avgActual), color: avgActual > avgIncome ? "#F87171" : "#F1F5F9", border: "#1E293B" },
                 {
@@ -185,7 +185,7 @@ export default function Overview({ payPeriods, categories, expenses }: Props) {
                     />
                   </div>
                   <div style={{ fontSize: 11, color: pct > 0 ? "#F87171" : "#475569", width: 110, textAlign: "right", flexShrink: 0 }}>
-                    {overCount} / {n} over ({pct}%)
+                    {overCount} / {selectedCount} over ({pct}%)
                   </div>
                 </div>
               ))}

@@ -18,8 +18,8 @@ function formatRange(p: PayPeriod) {
 }
 
 export default function PeriodFilter({ periods, selectedIds, onChange }: Props) {
-  function applyPreset(n: number | "all") {
-    const ids = n === "all" ? periods.map((p) => p.id) : periods.slice(-n).map((p) => p.id);
+  function applyPreset(count: number | "all") {
+    const ids = count === "all" ? periods.map((p) => p.id) : periods.slice(-count).map((p) => p.id);
     onChange(ids);
   }
 
@@ -31,13 +31,13 @@ export default function PeriodFilter({ periods, selectedIds, onChange }: Props) 
     <div style={{ marginTop: 18 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
         {[
-          { label: "Last 3", n: 3 as number | "all" },
-          { label: "Last 6", n: 6 as number | "all" },
-          { label: "All Time", n: "all" as number | "all" },
+          { label: "Last 3", count: 3 as number | "all" },
+          { label: "Last 6", count: 6 as number | "all" },
+          { label: "All Time", count: "all" as number | "all" },
         ].map((preset) => (
           <button
             key={preset.label}
-            onClick={() => applyPreset(preset.n)}
+            onClick={() => applyPreset(preset.count)}
             style={{
               padding: "6px 12px",
               borderRadius: 7,

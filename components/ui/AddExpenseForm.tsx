@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { addExpense } from "@/components/api/expenses";
 import { Category } from "@/lib/types";
 
 interface Props {
@@ -24,7 +24,7 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
     if (!categoryId || isNaN(numAmount) || numAmount === 0) return;
 
     setSubmitting(true);
-    const { error } = await supabase.from("expenses").insert({
+    const err = await addExpense({
       pay_period_id: payPeriodId,
       category_id: categoryId,
       amount: numAmount,
@@ -33,8 +33,8 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
     });
     setSubmitting(false);
 
-    if (error) {
-      alert(`Failed to add expense: ${error.message}`);
+    if (err) {
+      alert(`Failed to add expense: ${err}`);
       return;
     }
 

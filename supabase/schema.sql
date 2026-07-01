@@ -90,6 +90,57 @@ create policy "Allow all on categories" on categories for all using (true) with 
 create policy "Allow all on expenses" on expenses for all using (true) with check (true);
 
 -- ============================================================
+-- PAYCHECK CONFIG + PAY PERIOD ALLOCATIONS (Admin feature)
+-- Run these statements in Supabase SQL Editor.
+--
+-- accounts JSONB shape: array of
+--   { id: string, name: string, type: string, pct: number }
+--   type 'pre_tax'  — % of gross, reduces taxable income (traditional 401k, FSA)
+--   type 'post_tax' — % of gross, no tax benefit (Roth 401k)
+--   type 'spending' — % of net take-home → paycheck_amount (checking)
+--   type 'other'    — % of net take-home (savings, brokerage, etc.)
+--   All 'spending' + 'other' pcts must sum to 100.
+-- ============================================================
+create table paycheck_config (
+  id uuid primary key default gen_random_uuid(),
+  annual_salary numeric(10,2) not null default 105277.44,
+  pay_periods_per_year int not null default 24,
+  -- Flat pre-tax deductions per period
+  health_insurance_amount numeric(10,2) not null default 0.00,
+  hsa_amount numeric(10,2) not null default 0.00,
+  -- Tax rates (effective, as percentages 0–100)
+  federal_tax_pct numeric(5,2) not null default 13.21,
+  state_tax_pct numeric(5,2) not null default 5.50,
+  fica_pct numeric(5,2) not null default 7.65,
+  -- Dynamic accounts list
+  accounts jsonb not null default '[]',
+  updated_at timestamptz not null default now()
+);
+
+alter table paycheck_config enable row level security;
+create policy "Allow all on paycheck_config" on paycheck_config for all using (true) with check (true);
+
+-- Adds full allocation breakdown to each pay period (run separately if pay_periods exists).
+alter table pay_periods add column if not exists allocations jsonb;
+
+-- ============================================================
+-- INVESTMENTS
+-- Holdings tracker: one row per lot (ticker + account).
+-- Run in Supabase SQL Editor to add the investments page.
+-- ============================================================
+create table investments (
+  id uuid primary key default gen_random_uuid(),
+  ticker text not null,
+  account text not null,
+  shares numeric(12,6) not null default 0,
+  cost_per_share numeric(10,4) not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table investments enable row level security;
+create policy "Allow all on investments" on investments for all using (true) with check (true);
+
+-- ============================================================
 -- HELPER VIEW: spend per category per pay period
 -- ============================================================
 create view category_spend as

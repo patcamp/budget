@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { deleteExpense } from "@/components/api/expenses";
 import { Category, Expense } from "@/lib/types";
 
 interface Props {
@@ -9,15 +9,22 @@ interface Props {
   categories: Category[];
   locked: boolean;
   onChanged: () => Promise<void>;
+  noCard?: boolean;
+  categoryFilter?: string;
+  onCategoryFilterChange?: (val: string) => void;
 }
 
 function fmt(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-export default function Statement({ expenses, categories, locked, onChanged }: Props) {
+export default function Statement({ expenses, categories, locked, onChanged, noCard = false, categoryFilter: controlledFilter, onCategoryFilterChange }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  // Supports both controlled (Dashboard passes filter via props) and
+  // uncontrolled (standalone usage) modes.
+  const [internalFilter, setInternalFilter] = useState("all");
+  const categoryFilter = controlledFilter ?? internalFilter;
+  const setCategoryFilter = onCategoryFilterChange ?? setInternalFilter;
 
   const categoryById = useMemo(() => {
     const map: Record<string, Category> = {};
@@ -30,26 +37,27 @@ export default function Statement({ expenses, categories, locked, onChanged }: P
     [expenses, categoryFilter]
   );
 
-  const groups = useMemo(() => {
+  // Expenses sorted newest-first, then grouped by date for the statement view
+  const expensesByDate = useMemo((): [string, Expense[]][] => {
     const sorted = [...filteredExpenses].sort((a, b) => {
       if (a.expense_date !== b.expense_date) return b.expense_date.localeCompare(a.expense_date);
       return b.created_at.localeCompare(a.created_at);
     });
-    const map = new Map<string, Expense[]>();
-    for (const e of sorted) {
-      const list = map.get(e.expense_date) || [];
-      list.push(e);
-      map.set(e.expense_date, list);
+    const byDate = new Map<string, Expense[]>();
+    for (const expense of sorted) {
+      const existing = byDate.get(expense.expense_date) || [];
+      existing.push(expense);
+      byDate.set(expense.expense_date, existing);
     }
-    return Array.from(map.entries());
+    return Array.from(byDate.entries());
   }, [filteredExpenses]);
 
-  async function deleteExpense(id: string) {
+  async function handleDelete(id: string) {
     setDeletingId(id);
-    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    const err = await deleteExpense(id);
     setDeletingId(null);
-    if (error) {
-      alert(`Failed to delete: ${error.message}`);
+    if (err) {
+      alert(`Failed to delete: ${err}`);
       return;
     }
     await onChanged();
@@ -78,36 +86,16 @@ export default function Statement({ expenses, categories, locked, onChanged }: P
     </select>
   );
 
-  if (expenses.length === 0) {
-    return (
-      <div
-        style={{
-          background: "#0F1825",
-          border: "1px solid #1E293B",
-          borderRadius: 14,
-          padding: 24,
-          textAlign: "center",
-          color: "#475569",
-          fontSize: 12,
-        }}
-      >
-        No transactions yet this period.
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>{filterSelect}</div>
-      <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 14, overflow: "hidden" }}>
-        {groups.length === 0 && (
-          <div style={{ padding: 24, textAlign: "center", color: "#475569", fontSize: 12 }}>
-            No transactions in this category.
-          </div>
-        )}
-        {groups.map(([date, items]) => {
-          const dayTotal = items.reduce((s, e) => s + Number(e.amount), 0);
-          return (
+  const rows = (
+    <>
+      {expensesByDate.length === 0 && (
+        <div style={{ padding: 24, textAlign: "center", color: "#475569", fontSize: 12 }}>
+          No transactions in this category.
+        </div>
+      )}
+      {expensesByDate.map(([date, items]) => {
+        const dayTotal = items.reduce((sum, expense) => sum + Number(expense.amount), 0);
+        return (
           <div key={date}>
             <div
               style={{
@@ -128,11 +116,11 @@ export default function Statement({ expenses, categories, locked, onChanged }: P
               </div>
               <div style={{ fontSize: 11, color: "#374151" }}>{fmt(dayTotal)}</div>
             </div>
-            {items.map((e) => {
-              const cat = categoryById[e.category_id];
+            {items.map((expense) => {
+              const cat = categoryById[expense.category_id];
               return (
                 <div
-                  key={e.id}
+                  key={expense.id}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -162,17 +150,17 @@ export default function Statement({ expenses, categories, locked, onChanged }: P
                           textOverflow: "ellipsis",
                         }}
                       >
-                        {e.description || cat?.name || "Expense"}
+                        {expense.description || cat?.name || "Expense"}
                       </div>
                       <div style={{ fontSize: 10, color: "#475569" }}>{cat?.name || "Uncategorized"}</div>
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#F1F5F9" }}>{fmt(Number(e.amount))}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#F1F5F9" }}>{fmt(Number(expense.amount))}</div>
                     {!locked && (
                       <button
-                        onClick={() => deleteExpense(e.id)}
-                        disabled={deletingId === e.id}
+                        onClick={() => handleDelete(expense.id)}
+                        disabled={deletingId === expense.id}
                         style={{
                           background: "transparent",
                           border: "none",
@@ -191,8 +179,48 @@ export default function Statement({ expenses, categories, locked, onChanged }: P
               );
             })}
           </div>
-          );
-        })}
+        );
+      })}
+    </>
+  );
+
+  if (noCard) {
+    return (
+      <div>
+        {expenses.length === 0 ? (
+          <div style={{ padding: 24, textAlign: "center", color: "#475569", fontSize: 12 }}>
+            No transactions yet this period.
+          </div>
+        ) : (
+          rows
+        )}
+      </div>
+    );
+  }
+
+  if (expenses.length === 0) {
+    return (
+      <div
+        style={{
+          background: "#0F1825",
+          border: "1px solid #1E293B",
+          borderRadius: 14,
+          padding: 24,
+          textAlign: "center",
+          color: "#475569",
+          fontSize: 12,
+        }}
+      >
+        No transactions yet this period.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>{filterSelect}</div>
+      <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 14, overflow: "hidden" }}>
+        {rows}
       </div>
     </div>
   );

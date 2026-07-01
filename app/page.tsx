@@ -1,38 +1,36 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
-import { PayPeriod, Category, Expense } from "@/lib/types";
-import Dashboard from "@/components/Dashboard";
-import Overview from "@/components/Overview";
+import { loadPageData } from "@/components/api/data";
+import { PayPeriod, Category, Expense, PaycheckConfig, Investment } from "@/lib/types";
+import Dashboard from "@/components/ui/Dashboard";
+import Overview from "@/components/ui/Overview";
+import AdminPanel from "@/components/ui/AdminPanel";
+import InvestmentPanel from "@/components/ui/InvestmentPanel";
 
 export default function Home() {
   const [payPeriods, setPayPeriods] = useState<PayPeriod[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [paycheckConfig, setPaycheckConfig] = useState<PaycheckConfig | null>(null);
+  const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"period" | "overview">("period");
+  const [view, setView] = useState<"period" | "overview" | "investments" | "admin">("period");
 
   const loadAll = useCallback(async () => {
     setError(null);
-    const [ppRes, catRes, expRes] = await Promise.all([
-      supabase.from("pay_periods").select("*").order("start_date", { ascending: true }),
-      supabase.from("categories").select("*").eq("archived", false).order("sort_order", { ascending: true }),
-      supabase.from("expenses").select("*").order("expense_date", { ascending: false }),
-    ]);
-
-    if (ppRes.error || catRes.error || expRes.error) {
-      setError(
-        ppRes.error?.message || catRes.error?.message || expRes.error?.message || "Failed to load data"
-      );
+    const pageData = await loadPageData();
+    if (pageData.error) {
+      setError(pageData.error);
       setLoading(false);
       return;
     }
-
-    setPayPeriods(ppRes.data || []);
-    setCategories(catRes.data || []);
-    setExpenses(expRes.data || []);
+    setPayPeriods(pageData.payPeriods);
+    setCategories(pageData.categories);
+    setExpenses(pageData.expenses);
+    setPaycheckConfig(pageData.paycheckConfig);
+    setInvestments(pageData.investments);
     setLoading(false);
   }, []);
 
@@ -67,6 +65,8 @@ export default function Home() {
         {[
           { key: "period" as const, label: "This Period" },
           { key: "overview" as const, label: "Overview" },
+          { key: "investments" as const, label: "Investments" },
+          { key: "admin" as const, label: "Admin" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -86,15 +86,28 @@ export default function Home() {
           </button>
         ))}
       </div>
-      {view === "period" ? (
+      {view === "period" && (
         <Dashboard
           payPeriods={payPeriods}
           categories={categories}
           expenses={expenses}
           onRefresh={loadAll}
         />
-      ) : (
+      )}
+      {view === "overview" && (
         <Overview payPeriods={payPeriods} categories={categories} expenses={expenses} />
+      )}
+      {view === "investments" && (
+        <InvestmentPanel investments={investments} onRefresh={loadAll} />
+      )}
+      {view === "admin" && (
+        <AdminPanel
+          config={paycheckConfig}
+          payPeriods={payPeriods}
+          categories={categories}
+          expenses={expenses}
+          onRefresh={loadAll}
+        />
       )}
     </>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { deleteExpense } from "@/components/api/expenses";
 import { Category, Expense } from "@/lib/types";
 
 interface Props {
@@ -22,14 +22,15 @@ export default function CategoryTile({ category, actual, expenses, locked, onCha
 
   const budgeted = Number(category.budget_per_period);
   const over = actual > budgeted;
+  // Cap at 105 so the bar renders visibly full when over budget rather than overflowing.
   const pct = budgeted > 0 ? Math.min(105, Math.round((actual / budgeted) * 100)) : 0;
 
-  async function deleteExpense(id: string) {
+  async function handleDelete(id: string) {
     setDeletingId(id);
-    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    const err = await deleteExpense(id);
     setDeletingId(null);
-    if (error) {
-      alert(`Failed to delete: ${error.message}`);
+    if (err) {
+      alert(`Failed to delete: ${err}`);
       return;
     }
     await onChanged();
@@ -120,7 +121,7 @@ export default function CategoryTile({ category, actual, expenses, locked, onCha
                       <button
                         onClick={(ev) => {
                           ev.stopPropagation();
-                          deleteExpense(e.id);
+                          handleDelete(e.id);
                         }}
                         disabled={deletingId === e.id}
                         style={{

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { supabase } from "@/lib/supabase";
+import { togglePeriodLock, createPayPeriod } from "@/components/api/dashboard";
 import { PayPeriod, Category, Expense } from "@/lib/types";
 import AddExpenseForm from "./AddExpenseForm";
 import CategoryTile from "./CategoryTile";
@@ -31,7 +31,8 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
     sortedPeriods.length ? sortedPeriods[sortedPeriods.length - 1].id : null
   );
   const [busy, setBusy] = useState(false);
-  const [showNewPeriod, setShowNewPeriod] = useState(false);
+  const [statementOpen, setStatementOpen] = useState(true);
+  const [statementFilter, setStatementFilter] = useState("all");
 
   const activePeriod = sortedPeriods.find((p) => p.id === selectedPeriodId) || null;
 
@@ -58,50 +59,22 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
   async function toggleLock() {
     if (!activePeriod) return;
     setBusy(true);
-    const newLocked = !isLocked;
-    const { error } = await supabase
-      .from("pay_periods")
-      .update({
-        is_locked: newLocked,
-        locked_at: newLocked ? new Date().toISOString() : null,
-      })
-      .eq("id", activePeriod.id);
+    const err = await togglePeriodLock(activePeriod.id, !isLocked);
     setBusy(false);
-    if (error) {
-      alert(`Failed to update lock state: ${error.message}`);
+    if (err) {
+      alert(`Failed to update lock state: ${err}`);
       return;
     }
     await onRefresh();
   }
 
-  async function createNextPeriod() {
+  async function handleCreateNextPeriod() {
     if (!activePeriod) return;
     setBusy(true);
-    // Default: next period starts the day after current period ends,
-    // and runs 14 days (biweekly). Adjust dates after creation if needed.
-    const nextStart = new Date(activePeriod.end_date);
-    nextStart.setDate(nextStart.getDate() + 1);
-    const nextEnd = new Date(nextStart);
-    nextEnd.setDate(nextEnd.getDate() + 13);
-
-    const { data, error } = await supabase
-      .from("pay_periods")
-      .insert({
-        start_date: nextStart.toISOString().slice(0, 10),
-        end_date: nextEnd.toISOString().slice(0, 10),
-        paycheck_amount: activePeriod.paycheck_amount,
-        gross_amount: activePeriod.gross_amount,
-        roth_401k: activePeriod.roth_401k,
-        brokerage_amount: activePeriod.brokerage_amount,
-        savings_amount: activePeriod.savings_amount,
-        is_locked: false,
-      })
-      .select()
-      .single();
-
+    const { data, error } = await createPayPeriod(activePeriod);
     setBusy(false);
     if (error) {
-      alert(`Failed to create new pay period: ${error.message}`);
+      alert(`Failed to create new pay period: ${error}`);
       return;
     }
     await onRefresh();
@@ -138,7 +111,7 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
           periods={sortedPeriods}
           selectedId={selectedPeriodId}
           onSelect={setSelectedPeriodId}
-          onCreateNext={createNextPeriod}
+          onCreateNext={handleCreateNextPeriod}
           busy={busy}
         />
       </div>
@@ -248,16 +221,68 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
             )}
 
             {/* STATEMENT */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-              Statement
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <Statement
-                expenses={periodExpenses}
-                categories={categories}
-                locked={isLocked}
-                onChanged={onRefresh}
-              />
+            <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 12, overflow: "hidden", marginTop: 20, marginBottom: 20 }}>
+              <div
+                onClick={() => setStatementOpen((o) => !o)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  background: "#080B12",
+                  borderBottom: statementOpen ? "1px solid #1E293B" : "none",
+                  padding: "12px 18px",
+                  cursor: "pointer",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                    Statement
+                  </span>
+                  <span style={{ fontSize: 12, color: "#475569", fontWeight: 500 }}>
+                    {periodExpenses.length} transaction{periodExpenses.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                {statementOpen && (
+                  <select
+                    value={statementFilter}
+                    onChange={(e) => setStatementFilter(e.target.value)}
+                    onClick={(e) => e.stopPropagation()} // prevent click bubbling to the collapse toggle
+                    style={{
+                      flex: 1,
+                      maxWidth: 200,
+                      marginLeft: "auto",
+                      background: "#0F1825",
+                      border: "1px solid #1E293B",
+                      borderRadius: 6,
+                      color: "#94A3B8",
+                      fontSize: 12,
+                      padding: "5px 8px",
+                      outline: "none",
+                      cursor: "default",
+                    }}
+                  >
+                    <option value="all">All Categories</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                )}
+                <span style={{ fontSize: 12, color: "#94A3B8", fontWeight: 700, flexShrink: 0 }}>
+                  {statementOpen ? "▲" : "▼"}
+                </span>
+              </div>
+              {statementOpen && (
+                <Statement
+                  expenses={periodExpenses}
+                  categories={categories}
+                  locked={isLocked}
+                  onChanged={onRefresh}
+                  noCard
+                  categoryFilter={statementFilter}
+                  onCategoryFilterChange={setStatementFilter}
+                />
+              )}
             </div>
 
             {/* BAR CHART */}
