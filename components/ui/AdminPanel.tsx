@@ -412,7 +412,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
 
       {/* ── PAYCHECK TAB ────────────────────────────────────────────────────── */}
       {adminTab === "paycheck" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20, alignItems: "start" }}>
+        <div className="paycheck-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={panelStyle}>
               <SectionLabel text="Salary" />
@@ -437,7 +437,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
                 <NumField label="HSA" field="hsa_amount" prefix="$" />
               </div>
             </div>
-            <div style={panelStyle}>
+            <div style={{ ...panelStyle, overflowX: "auto" }}>
               <SectionLabel text="Accounts" />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 190px 100px 28px", gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 10, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>Name</span>
@@ -545,7 +545,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
             <div style={{ ...panelStyle, textAlign: "center", color: "#475569", fontSize: 13 }}>No pay periods yet.</div>
           )}
           {sortedPeriods.length > 0 && (
-            <div style={panelStyle}>
+            <div style={{ ...panelStyle, overflowX: "auto" }}>
               {/* Table header */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 110px 110px 80px", gap: 12, paddingBottom: 10, borderBottom: "1px solid #1E293B", marginBottom: 4 }}>
                 {["Period", "Status", "Gross", "Paycheck", ""].map((h) => (
@@ -654,7 +654,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
             </div>
           )}
 
-          <div style={panelStyle}>
+          <div style={{ ...panelStyle, overflowX: "auto" }}>
             {/* Table header */}
             <div style={{ display: "grid", gridTemplateColumns: "32px 1fr 90px 110px 56px 70px 80px", gap: 10, paddingBottom: 10, borderBottom: "1px solid #1E293B", marginBottom: 4 }}>
               {["", "Name", "Type", "Budget", "Order", "Txns", ""].map((h) => (

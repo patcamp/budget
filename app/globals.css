@@ -10,6 +10,22 @@ body {
   color: #e2e8f0;
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Paycheck tab: side-by-side on desktop, stacked on mobile */
+.paycheck-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .paycheck-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 button {

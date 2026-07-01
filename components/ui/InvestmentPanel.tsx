@@ -237,7 +237,7 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
       )}
 
       {/* Add holding form */}
-      <div style={panelStyle}>
+      <div style={{ ...panelStyle, overflowX: "auto" }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>Add Holding</div>
         <div style={{ display: "grid", gridTemplateColumns: "100px 1fr 120px 140px auto", gap: 10, alignItems: "end" }}>
           <div>

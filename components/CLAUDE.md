@@ -1,27 +1,61 @@
 # components/
 
-All client components (`"use client"`). No server components here. No shared component library — each file is self-contained with inline styles.
+Split into two subdirectories:
 
-## Ownership / data flow
+- `api/` — all Supabase calls. No JSX, no React imports. Each file owns one domain.
+- `ui/` — all client components (`"use client"`). No direct `supabase` imports — all DB access goes through `api/`.
 
-- `Dashboard.tsx` is the hub: owns `selectedPeriodId` and `busy` state, derives `spendByCategory`/`totalBudget`/`totalActual`/`surplus`/chart data via `useMemo`, and is the only place that mutates `pay_periods` (lock/unlock, create next period). It receives `payPeriods`/`categories`/`expenses`/`onRefresh` as props from `app/page.tsx` and passes filtered slices down. Renders, in order: lock status bar, summary cards, `AddExpenseForm` (when unlocked), `Statement`, the actual-vs-budget bar chart, then the `CategoryTile` grid.
-- `PayPeriodPicker.tsx` — pure presentational period-selector pills + "+ New Pay Period" button. No Supabase calls; calls `onSelect`/`onCreateNext` props.
-- `AddExpenseForm.tsx` — owns its own form state, inserts directly into `expenses` via Supabase, then calls `onAdded` (wired to `Dashboard`'s `onRefresh`) to trigger the parent refetch. Validates amount > 0 client-side only — no server-side validation beyond Postgres column types.
-- `CategoryTile.tsx` — owns its own `expanded`/`deletingId` state, deletes directly from `expenses` via Supabase, then calls `onChanged`.
-- `Statement.tsx` — renders the active period's expenses as a single chronological list (grouped by date, newest first, with a per-day subtotal), independent of the per-category tiles below it. Owns its own `categoryFilter`/`deletingId` state; deletes directly from `expenses` via Supabase then calls `onChanged` (wired to `onRefresh`), same pattern as `CategoryTile`. The delete `×` is hidden when `locked` is true, same gating as `CategoryTile`.
-- `Overview.tsx` — the "Overview" tab (toggled in `app/page.tsx`, sibling to `Dashboard`). Read-only: no Supabase calls, no `onRefresh`, no lock logic. Takes the same `payPeriods`/`categories`/`expenses` props `app/page.tsx` already fetches and derives multi-period averages, a trend chart, and over-budget frequency per category entirely client-side via `useMemo`. Owns `selectedIds` (which periods are included), initialized to all periods.
-- `PeriodFilter.tsx` — pure presentational multi-select period picker used by `Overview.tsx`. Mirrors `PayPeriodPicker.tsx`'s pill styling but toggles membership in an array instead of replacing a single selection, plus preset buttons (Last 3 / Last 6 / All Time). No Supabase calls.
+## api/ — Supabase action files
 
-So: **reads flow down from `app/page.tsx` through `Dashboard`; writes happen wherever the action is triggered (form, tile, dashboard) and always end with a call back up to `onRefresh`/`onChanged`/`onAdded` to refetch from source.** There is no local cache patching — every mutation causes a full three-query refetch. If you add a new mutation, follow this same pattern rather than introducing local state that could drift from the DB.
+| File | What it owns |
+|------|-------------|
+| `data.ts` | `loadPageData()` — the single page-level fetch (5 parallel queries) |
+| `dashboard.ts` | `togglePeriodLock`, `createPayPeriod` |
+| `expenses.ts` | `addExpense`, `deleteExpense` |
+| `investments.ts` | `addInvestment`, `deleteInvestment` |
+| `periods.ts` | `updatePayPeriod`, `deletePayPeriodWithExpenses` (deletes child expenses first — no DB cascade) |
+| `categories.ts` | `addCategory`, `updateCategory`, `deleteCategory` |
+| `admin.ts` | `upsertPaycheckConfig`, `applyConfigToOpenPeriods` (only updates unlocked periods) |
+
+All functions return `string | null` (the error message) or a typed result object. None call each other.
+
+## ui/ — Components
+
+**`Dashboard.tsx`** is the hub for the "This Period" tab. Owns `selectedPeriodId`, `busy`, `statementOpen`, and `statementFilter` state. Derives `spendByCategory`, `totalBudget`, `totalActual`, `surplus`, and chart data via `useMemo`. Renders (in order): lock status bar, summary cards, `AddExpenseForm` (unlocked only), collapsible Statement card (header row holds the filter dropdown and collapse toggle), bar chart, category tile grid.
+
+`statementFilter` lives in Dashboard rather than Statement so the category dropdown can sit in the Statement header bar alongside the collapse button — passing it as a controlled prop to Statement.
+
+**`Statement.tsx`** renders the period's transactions grouped by date (newest first) with per-day subtotals. Supports a controlled mode (Dashboard passes `categoryFilter`/`onCategoryFilterChange`) and an uncontrolled standalone mode. In `noCard` mode (used inside Dashboard's unified card), it renders without its own outer wrapper or filter row.
+
+**`CategoryTile.tsx`** — per-category spend card with an expandable inline expense list. Progress bar is capped at 105% so it renders visibly "full" when over budget.
+
+**`AddExpenseForm.tsx`** — owns its own form state, calls `addExpense`, then calls `onAdded` (→ `onRefresh`).
+
+**`PayPeriodPicker.tsx`** — pure presentational period selector pills + "New Pay Period" button. No Supabase calls.
+
+**`Overview.tsx`** — "Overview" tab. Read-only, no mutations. Owns `selectedIds` (initialized to all periods). Shows multi-period averages, income-vs-actual trend chart, and over-budget frequency per category, all computed client-side via `useMemo`.
+
+**`PeriodFilter.tsx`** — multi-select period picker used by Overview. Toggle-based (vs. single-select in PayPeriodPicker). Preset buttons: Last 3 / Last 6 / All Time.
+
+**`InvestmentPanel.tsx`** — "Investments" tab. Fetches live prices from `/api/quotes` on mount (and whenever the ticker list changes). Groups holdings by account. Uses `tickers.join(",")` as the `useEffect` dep to avoid infinite re-renders from array identity changes.
+
+**`AdminPanel.tsx`** — "Admin" tab with 3 sub-tabs:
+- **Paycheck** — configure salary, deductions, tax rates, and account allocations; preview the paycheck breakdown; apply to all unlocked periods.
+- **Pay Periods** — edit dates/amounts inline, delete (shows expense count before confirming).
+- **Categories** — add, edit (name, color, budget, sort order), delete (blocked when the category has any transactions — checked client-side since all expenses are already in state).
+
+## Data flow and mutation pattern
+
+Reads flow down from `app/page.tsx`. Writes happen wherever the action lives (form, tile, panel) and always end with `onRefresh`/`onChanged`/`onAdded` → `loadAll()` in `page.tsx` for a full refetch. No local cache patching, no optimistic UI.
 
 ## Locking semantics
 
-`locked` (derived from `activePeriod.is_locked`) is passed down to gate UI, not enforced server-side (RLS allows all operations — see `supabase/CLAUDE.md`). If you add a new mutation, check the `locked` prop and hide/disable the control client-side, consistent with how `AddExpenseForm` is hidden and the delete `×` is hidden in `CategoryTile` when locked.
+`locked` (derived from `activePeriod.is_locked`) is a client-side UI gate only — RLS allows all writes regardless. If you add a new mutation, check the `locked` prop and hide/disable the control, consistent with how `AddExpenseForm` and the delete buttons are gated.
 
 ## Styling
 
-Inline `style` objects, dark theme. Reuse the existing palette rather than inventing new colors:
-- Panel background `#0F1825`, page background `#080B12`, borders `#1E293B`
+Inline `style` objects throughout. Reuse the existing palette:
+- Page bg `#080B12`, panel bg `#0F1825`, borders `#1E293B`
 - Text: primary `#F1F5F9`/`#E2E8F0`, secondary `#94A3B8`/`#64748B`, muted `#475569`/`#374151`
 - Status: green `#4ADE80`/`#15803D` (good/locked), red `#F87171`/`#EF4444` (over budget), amber `#FBBF24` (open/in-progress)
-- Category accent colors come from `category.color` (set per-row in the DB), not hardcoded per component.
+- Category accent colors come from `category.color` (set per-row in DB), not hardcoded per component

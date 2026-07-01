@@ -19,17 +19,20 @@ Requires `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env
 
 ## Architecture
 
-- `app/` — Next.js App Router entry point, fetches all data once on mount. See [app/CLAUDE.md](app/CLAUDE.md).
-- `components/` — all UI, all client components (`"use client"`). State and most Supabase writes live in `Dashboard.tsx`. See [components/CLAUDE.md](components/CLAUDE.md).
+- `app/` — Next.js App Router entry point. `page.tsx` fetches all data on mount via `loadPageData()` and owns the top-level tab navigation (This Period / Overview / Investments / Admin). See [app/CLAUDE.md](app/CLAUDE.md).
+- `components/api/` — all Supabase calls, no JSX. Each file owns one domain: `data.ts` (page load), `dashboard.ts` (lock/create period), `expenses.ts`, `investments.ts`, `periods.ts` (admin edit/delete), `categories.ts` (admin CRUD), `admin.ts` (paycheck config).
+- `components/ui/` — all client components (`"use client"`), no direct Supabase imports. See [components/CLAUDE.md](components/CLAUDE.md).
 - `lib/` — Supabase client singleton + TypeScript types mirroring the DB schema. See [lib/CLAUDE.md](lib/CLAUDE.md).
+- `app/api/quotes/route.ts` — server-side route that proxies Yahoo Finance price lookups for the Investments tab (avoids CORS, keeps yahoo-finance2 server-only).
 - `supabase/schema.sql` — full DB schema, seed data, and RLS policies, run manually in the Supabase SQL Editor (no migration tooling). See [supabase/CLAUDE.md](supabase/CLAUDE.md).
 
 ## Data flow
 
-`app/page.tsx` loads `pay_periods`, `categories`, `expenses` in parallel on mount and passes them down as props to `Dashboard`. There is no global state manager — `Dashboard` derives everything (selected period, per-category spend totals, chart data) with `useMemo`, and any mutation (add/delete expense, lock/unlock period, create period) calls Supabase directly then invokes `onRefresh` to refetch from `app/page.tsx`. There is no optimistic UI and no realtime subscriptions.
+`app/page.tsx` calls `loadPageData()` on mount, which fires 5 parallel Supabase queries (`pay_periods`, `categories`, `expenses`, `paycheck_config`, `investments`) and returns them as a single object. All data is held in `useState` in `page.tsx` and passed as props to whichever tab is active. Any mutation anywhere in the tree calls `onRefresh` (wired to `loadAll`) to trigger a full refetch — no optimistic UI, no realtime subscriptions, no local cache patching.
 
 ## Conventions worth knowing before editing
 
-- Styling is inline `style={{...}}` objects throughout — no CSS modules/Tailwind for component styling (Tailwind is not installed). Stay consistent with the existing dark theme palette (`#0F1825` panels, `#1E293B` borders, `#3B82F6`/category `color` accents) rather than introducing a new styling approach.
-- Money values are stored as `numeric(10,2)` in Postgres but arrive as strings over the JS client in some paths — existing code wraps reads in `Number(...)` before arithmetic. Keep doing this.
-- Schema changes require manually re-running SQL in the Supabase dashboard; there's no CLI/migration history, so document new SQL inline in `supabase/schema.sql` and tell the user to re-run it.
+- Styling is inline `style={{...}}` objects throughout — no CSS modules/Tailwind (Tailwind is not installed). Dark theme palette: `#080B12` page bg, `#0F1825` panels, `#1E293B` borders, `#3B82F6`/category `color` accents.
+- Money values are stored as `numeric(10,2)` in Postgres but arrive as strings over the JS client in some paths — always wrap reads in `Number(...)` before arithmetic.
+- Schema changes require manually re-running SQL in the Supabase dashboard; document new SQL inline in `supabase/schema.sql`.
+- `components/api/` files must not import from each other (they're flat, single-domain). `components/ui/` files must not import `supabase` directly — all DB access goes through `components/api/`.
