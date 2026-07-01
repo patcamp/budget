@@ -86,7 +86,7 @@ export default function Overview({ payPeriods, categories, expenses }: Props) {
         <div style={{ fontSize: 10, letterSpacing: "0.18em", color: "#475569", textTransform: "uppercase", marginBottom: 6 }}>
           Overview · Multi-Period Averages
         </div>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: "#F8FAFC", letterSpacing: "-0.5px" }}>Patrick&apos;s Budget</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: "#F8FAFC", letterSpacing: "-0.5px" }}>Budget</h1>
         <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>
           Averages and trends across the pay periods you select below
         </div>
