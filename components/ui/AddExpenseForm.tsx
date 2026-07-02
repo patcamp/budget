@@ -97,7 +97,7 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
         <label style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em" }}>Description (optional)</label>
         <input
           type="text"
-          placeholder="e.g. El Rey dinner"
+          placeholder="e.g. dinner out"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           style={inputStyle}

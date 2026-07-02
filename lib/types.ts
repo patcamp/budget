@@ -7,8 +7,17 @@ export interface Account {
   pct: number;
 }
 
+export interface Profile {
+  id: string; // = auth.users id
+  email: string;
+  full_name: string | null;
+  company: string | null;
+  created_at: string;
+}
+
 export interface PayPeriod {
   id: string;
+  user_id: string;
   start_date: string;
   end_date: string;
   paycheck_amount: number;
@@ -21,10 +30,15 @@ export interface PayPeriod {
   created_at: string;
   notes: string | null;
   allocations: { name: string; type: string; amount: number }[] | null;
+  // Actual hours worked this period — null for salary users and for
+  // hourly periods created before the hourly migration.
+  day_hours: number | null;
+  night_hours: number | null;
 }
 
 export interface Category {
   id: string;
+  user_id: string;
   name: string;
   budget_per_period: number;
   is_fixed: boolean;
@@ -36,6 +50,7 @@ export interface Category {
 
 export interface Expense {
   id: string;
+  user_id: string;
   pay_period_id: string;
   category_id: string;
   amount: number;
@@ -46,8 +61,15 @@ export interface Expense {
 
 export interface PaycheckConfig {
   id: string;
+  user_id: string;
+  pay_type: "salary" | "hourly";
   annual_salary: number;
   pay_periods_per_year: number;
+  hourly_rate: number;
+  night_diff_type: "flat" | "pct";
+  night_diff_value: number; // $/hr when "flat", percent when "pct"
+  default_day_hours: number; // per pay period
+  default_night_hours: number;
   health_insurance_amount: number;
   hsa_amount: number;
   federal_tax_pct: number;
@@ -59,6 +81,7 @@ export interface PaycheckConfig {
 
 export interface Investment {
   id: string;
+  user_id: string;
   ticker: string;
   account: string;
   shares: number;

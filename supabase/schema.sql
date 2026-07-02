@@ -157,3 +157,147 @@ from categories c
 left join expenses e on e.category_id = c.id
 where c.archived = false
 group by e.pay_period_id, e.category_id, c.name, c.color, c.budget_per_period, c.is_fixed, c.sort_order;
+
+-- ============================================================
+-- MULTI-USER MIGRATION (2026-07-02)
+-- Adds Supabase Auth support: profiles table, per-row user_id
+-- ownership, and auth.uid()-scoped RLS replacing the old
+-- permissive "allow all" policies.
+--
+-- RUN ORDER (important):
+--   Step 1: run sections A + B below.
+--   Step 2: in Dashboard > Authentication > Users > "Add user",
+--           create patrickcampfield@gmail.com with "Auto Confirm
+--           User" checked. (The trigger from section A creates
+--           the profile row automatically.)
+--   Step 3: run sections C + D + E below to backfill existing
+--           rows to that user and lock down RLS.
+--   Recommended: Dashboard > Authentication > Sign In / Up >
+--           disable "Confirm email" so registration doesn't
+--           require an email round-trip (the app handles both).
+-- ============================================================
+
+-- ── A. PROFILES ─────────────────────────────────────────────
+-- One row per auth user; holds registration info (name, company).
+create table profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null,
+  full_name text,
+  company text,
+  created_at timestamptz not null default now()
+);
+
+alter table profiles enable row level security;
+create policy "Own profile" on profiles for all
+  using (auth.uid() = id) with check (auth.uid() = id);
+
+-- Auto-create a profile row on signup. The register form passes
+-- full_name/company via auth signUp metadata (raw_user_meta_data).
+create function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (id, email, full_name, company)
+  values (new.id, new.email, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'company');
+  return new;
+end $$;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- ── B. ADD user_id OWNERSHIP COLUMNS ────────────────────────
+-- default auth.uid(): the DB stamps ownership on insert, so
+-- client insert code never needs to send user_id explicitly.
+alter table pay_periods     add column user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table categories      add column user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table expenses        add column user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table paycheck_config add column user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table investments     add column user_id uuid references auth.users(id) on delete cascade default auth.uid();
+
+-- ── C. BACKFILL EXISTING DATA TO PATRICK'S ACCOUNT ──────────
+-- Run AFTER creating the patrickcampfield@gmail.com user (step 2).
+update pay_periods     set user_id = (select id from auth.users where email = 'patrickcampfield@gmail.com') where user_id is null;
+update categories      set user_id = (select id from auth.users where email = 'patrickcampfield@gmail.com') where user_id is null;
+update expenses        set user_id = (select id from auth.users where email = 'patrickcampfield@gmail.com') where user_id is null;
+update paycheck_config set user_id = (select id from auth.users where email = 'patrickcampfield@gmail.com') where user_id is null;
+update investments     set user_id = (select id from auth.users where email = 'patrickcampfield@gmail.com') where user_id is null;
+
+alter table pay_periods     alter column user_id set not null;
+alter table categories      alter column user_id set not null;
+alter table expenses        alter column user_id set not null;
+alter table paycheck_config alter column user_id set not null;
+alter table investments     alter column user_id set not null;
+
+create index idx_pay_periods_user     on pay_periods(user_id);
+create index idx_categories_user      on categories(user_id);
+create index idx_expenses_user        on expenses(user_id);
+create index idx_paycheck_config_user on paycheck_config(user_id);
+create index idx_investments_user     on investments(user_id);
+
+-- ── D. OWNER-SCOPED RLS (replaces the permissive policies) ──
+-- After this runs, the anon key returns ZERO rows without a
+-- valid session — this is the actual data protection layer.
+drop policy "Allow all on pay_periods"     on pay_periods;
+drop policy "Allow all on categories"      on categories;
+drop policy "Allow all on expenses"        on expenses;
+drop policy "Allow all on paycheck_config" on paycheck_config;
+drop policy "Allow all on investments"     on investments;
+
+create policy "Own rows" on pay_periods     for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Own rows" on categories      for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Own rows" on expenses        for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Own rows" on paycheck_config for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Own rows" on investments     for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ── E. CONSTRAINT + VIEW FIXES ──────────────────────────────
+-- Category names are now unique per user, not globally.
+alter table categories drop constraint categories_name_key;
+alter table categories add constraint categories_user_name_key unique (user_id, name);
+
+-- Personal column defaults from the single-user era become neutral —
+-- new rows always receive explicit values from the app anyway.
+alter table pay_periods alter column paycheck_amount  set default 0;
+alter table pay_periods alter column gross_amount     set default 0;
+alter table pay_periods alter column roth_401k        set default 0;
+alter table pay_periods alter column brokerage_amount set default 0;
+alter table pay_periods alter column savings_amount   set default 0;
+alter table paycheck_config alter column annual_salary set default 0;
+
+-- Recreate category_spend with security_invoker so it respects
+-- RLS (default views run as owner and would bypass it), and
+-- expose user_id. Still unused by app code — kept for parity.
+drop view category_spend;
+create view category_spend with (security_invoker = true) as
+select
+  c.user_id,
+  e.pay_period_id,
+  e.category_id,
+  c.name as category_name,
+  c.color,
+  c.budget_per_period,
+  c.is_fixed,
+  c.sort_order,
+  coalesce(sum(e.amount), 0) as actual_spent
+from categories c
+left join expenses e on e.category_id = c.id
+where c.archived = false
+group by c.user_id, e.pay_period_id, e.category_id, c.name, c.color, c.budget_per_period, c.is_fixed, c.sort_order;
+
+-- ============================================================
+-- HOURLY PAY + NIGHT DIFFERENTIAL (2026-07-02)
+-- Supports hourly users (e.g. nurses) alongside salaried ones.
+-- Config holds the default schedule; each pay period stores its
+-- ACTUAL day/night hours (editable on the This Period tab while
+-- unlocked), so gross varies per period with extra shifts.
+-- ============================================================
+alter table paycheck_config add column pay_type text not null default 'salary' check (pay_type in ('salary','hourly'));
+alter table paycheck_config add column hourly_rate numeric(10,2) not null default 0;
+alter table paycheck_config add column night_diff_type text not null default 'flat' check (night_diff_type in ('flat','pct'));
+alter table paycheck_config add column night_diff_value numeric(10,2) not null default 0; -- $/hr when 'flat', percent when 'pct'
+alter table paycheck_config add column default_day_hours numeric(6,2) not null default 0;   -- per pay period
+alter table paycheck_config add column default_night_hours numeric(6,2) not null default 0; -- per pay period
+
+-- Actual hours worked in the period. Null on salary users' periods
+-- and on hourly periods created before this migration.
+alter table pay_periods add column day_hours numeric(6,2);
+alter table pay_periods add column night_hours numeric(6,2);

@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
-import { PayPeriod } from "@/lib/types";
+import { PayPeriod, PaycheckConfig } from "@/lib/types";
+import { hourlyGross, computeBreakdown, toAllocations } from "@/lib/paycheck";
 
 export async function togglePeriodLock(id: string, isLocked: boolean): Promise<string | null> {
   const { error } = await supabase
@@ -32,10 +33,52 @@ export async function createPayPeriod(
       brokerage_amount: activePeriod.brokerage_amount,
       savings_amount: activePeriod.savings_amount,
       allocations: activePeriod.allocations,
+      day_hours: activePeriod.day_hours,
+      night_hours: activePeriod.night_hours,
       is_locked: false,
     })
     .select()
     .single();
 
   return { data: data as PayPeriod | null, error: error?.message ?? null };
+}
+
+// Saves the actual hours worked in a period (hourly users only) and
+// recomputes that period's gross/paycheck/allocations from the config's
+// rate, night differential, and tax/account settings.
+export async function updatePeriodHours(
+  periodId: string,
+  config: PaycheckConfig,
+  dayHours: number,
+  nightHours: number
+): Promise<string | null> {
+  const gross = hourlyGross(
+    Number(config.hourly_rate),
+    config.night_diff_type,
+    Number(config.night_diff_value),
+    dayHours,
+    nightHours
+  );
+  const breakdown = computeBreakdown(
+    gross,
+    {
+      health_insurance_amount: Number(config.health_insurance_amount),
+      hsa_amount: Number(config.hsa_amount),
+      federal_tax_pct: Number(config.federal_tax_pct),
+      state_tax_pct: Number(config.state_tax_pct),
+      fica_pct: Number(config.fica_pct),
+    },
+    config.accounts ?? []
+  );
+  const { error } = await supabase
+    .from("pay_periods")
+    .update({
+      day_hours: dayHours,
+      night_hours: nightHours,
+      gross_amount: Number(gross.toFixed(2)),
+      paycheck_amount: Number(breakdown.spending.toFixed(2)),
+      allocations: toAllocations(breakdown),
+    })
+    .eq("id", periodId);
+  return error?.message ?? null;
 }

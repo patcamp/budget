@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { togglePeriodLock, createPayPeriod } from "@/components/api/dashboard";
-import { PayPeriod, Category, Expense } from "@/lib/types";
+import { togglePeriodLock, createPayPeriod, updatePeriodHours } from "@/components/api/dashboard";
+import { nightRate } from "@/lib/paycheck";
+import { PayPeriod, Category, Expense, Profile, PaycheckConfig } from "@/lib/types";
 import AddExpenseForm from "./AddExpenseForm";
 import CategoryTile from "./CategoryTile";
 import PayPeriodPicker from "./PayPeriodPicker";
@@ -13,6 +14,8 @@ interface Props {
   payPeriods: PayPeriod[];
   categories: Category[];
   expenses: Expense[];
+  profile: Profile | null;
+  paycheckConfig: PaycheckConfig | null;
   onRefresh: () => Promise<void>;
 }
 
@@ -25,7 +28,7 @@ function fmtExact(n: number) {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function Dashboard({ payPeriods, categories, expenses, onRefresh }: Props) {
+export default function Dashboard({ payPeriods, categories, expenses, profile, paycheckConfig, onRefresh }: Props) {
   const sortedPeriods = useMemo(
     () => [...payPeriods].sort((a, b) => a.start_date.localeCompare(b.start_date)),
     [payPeriods]
@@ -37,8 +40,16 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
   const [busy, setBusy] = useState(false);
   const [statementOpen, setStatementOpen] = useState(true);
   const [statementFilter, setStatementFilter] = useState("all");
+  const [hoursEditing, setHoursEditing] = useState(false);
+  const [hoursDraft, setHoursDraft] = useState({ day: "", night: "" });
+  const [hoursError, setHoursError] = useState<string | null>(null);
 
   const activePeriod = sortedPeriods.find((p) => p.id === selectedPeriodId) || null;
+  const isHourly = paycheckConfig?.pay_type === "hourly";
+  // Periods created before the hourly migration have null hours — fall back
+  // to the config's default schedule for display.
+  const dayHours = activePeriod?.day_hours ?? Number(paycheckConfig?.default_day_hours ?? 0);
+  const nightHours = activePeriod?.night_hours ?? Number(paycheckConfig?.default_night_hours ?? 0);
 
   const periodExpenses = useMemo(
     () => expenses.filter((e) => e.pay_period_id === activePeriod?.id),
@@ -69,6 +80,28 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
       alert(`Failed to update lock state: ${err}`);
       return;
     }
+    await onRefresh();
+  }
+
+  function startEditHours() {
+    setHoursDraft({ day: String(dayHours), night: String(nightHours) });
+    setHoursError(null);
+    setHoursEditing(true);
+  }
+
+  async function saveHours() {
+    if (!activePeriod || !paycheckConfig) return;
+    const day = parseFloat(hoursDraft.day);
+    const night = parseFloat(hoursDraft.night);
+    if (isNaN(day) || day < 0 || isNaN(night) || night < 0) {
+      setHoursError("Hours must be valid non-negative numbers.");
+      return;
+    }
+    setBusy(true);
+    const err = await updatePeriodHours(activePeriod.id, paycheckConfig, day, night);
+    setBusy(false);
+    if (err) { setHoursError(err); return; }
+    setHoursEditing(false);
     await onRefresh();
   }
 
@@ -103,18 +136,22 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
           padding: "28px 24px 20px",
         }}
       >
-        <div style={{ fontSize: 10, letterSpacing: "0.18em", color: "#475569", textTransform: "uppercase", marginBottom: 6 }}>
-          Booz Allen Hamilton · Semi-Monthly
-        </div>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: "#F8FAFC", letterSpacing: "-0.5px" }}>Patrick&apos;s Budget</h1>
+        {profile?.company && (
+          <div style={{ fontSize: 10, letterSpacing: "0.18em", color: "#475569", textTransform: "uppercase", marginBottom: 6 }}>
+            {profile.company}
+          </div>
+        )}
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: "#F8FAFC", letterSpacing: "-0.5px" }}>
+          {profile?.full_name ? `${profile.full_name.split(" ")[0]}'s Budget` : "My Budget"}
+        </h1>
         <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>
-          Live pay-period tracker · Supabase-backed
+          Live pay-period tracker
         </div>
 
         <PayPeriodPicker
           periods={sortedPeriods}
           selectedId={selectedPeriodId}
-          onSelect={setSelectedPeriodId}
+          onSelect={(id) => { setSelectedPeriodId(id); setHoursEditing(false); setHoursError(null); }}
           onCreateNext={handleCreateNextPeriod}
           busy={busy}
         />
@@ -185,6 +222,66 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
             {isLocked && (
               <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, padding: "0 4px" }}>
                 This period is locked. Expenses are read-only. Unlock if you need to correct something.
+              </div>
+            )}
+
+            {/* HOURS (hourly pay only) */}
+            {isHourly && paycheckConfig && (
+              <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 10, padding: "12px 18px", marginBottom: 18 }}>
+                {!hoursEditing ? (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                        Hours This Period
+                      </span>
+                      <span style={{ fontSize: 13, color: "#F1F5F9", fontWeight: 600 }}>
+                        {dayHours} day
+                      </span>
+                      <span style={{ fontSize: 13, color: "#A78BFA", fontWeight: 600 }}>
+                        {nightHours} night
+                      </span>
+                      <span style={{ fontSize: 11, color: "#475569" }}>
+                        night rate ${nightRate(Number(paycheckConfig.hourly_rate), paycheckConfig.night_diff_type, Number(paycheckConfig.night_diff_value)).toFixed(2)}/hr
+                      </span>
+                    </div>
+                    {!isLocked && (
+                      <button
+                        onClick={startEditHours}
+                        style={{ padding: "5px 14px", background: "transparent", border: "1px solid #1E293B", borderRadius: 6, color: "#94A3B8", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+                      >
+                        Edit Hours
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+                    {(["day", "night"] as const).map((kind) => (
+                      <div key={kind}>
+                        <label style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>
+                          {kind} hours
+                        </label>
+                        <input
+                          type="number" step="0.25" min="0" value={hoursDraft[kind]}
+                          onChange={(e) => setHoursDraft((d) => ({ ...d, [kind]: e.target.value }))}
+                          style={{ background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, color: "#F1F5F9", fontSize: 13, padding: "6px 10px", outline: "none", width: 90 }}
+                        />
+                      </div>
+                    ))}
+                    <button
+                      onClick={saveHours} disabled={busy}
+                      style={{ padding: "7px 16px", background: "#1D4ED8", border: "1px solid #3B82F6", borderRadius: 6, color: "#fff", fontSize: 12, fontWeight: 600, cursor: busy ? "wait" : "pointer" }}
+                    >
+                      {busy ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      onClick={() => { setHoursEditing(false); setHoursError(null); }}
+                      style={{ padding: "7px 16px", background: "transparent", border: "1px solid #1E293B", borderRadius: 6, color: "#94A3B8", fontSize: 12, cursor: "pointer" }}
+                    >
+                      Cancel
+                    </button>
+                    {hoursError && <span style={{ fontSize: 12, color: "#F87171" }}>{hoursError}</span>}
+                  </div>
+                )}
               </div>
             )}
 

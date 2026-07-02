@@ -1,26 +1,35 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { upsertPaycheckConfig, applyConfigToOpenPeriods } from "@/components/api/admin";
+import { upsertPaycheckConfig, applyConfigToOpenPeriods, applyHourlyConfigToOpenPeriods } from "@/components/api/admin";
 import { updatePayPeriod, deletePayPeriodWithExpenses } from "@/components/api/periods";
 import { addCategory, updateCategory, deleteCategory } from "@/components/api/categories";
-import { PaycheckConfig, Account, PayPeriod, Category, Expense } from "@/lib/types";
+import { updateProfile } from "@/components/api/auth";
+import { hourlyGross, nightRate, computeBreakdown } from "@/lib/paycheck";
+import { PaycheckConfig, Account, PayPeriod, Category, Expense, Profile } from "@/lib/types";
 
-type AdminTab = "paycheck" | "periods" | "categories";
+type AdminTab = "paycheck" | "periods" | "categories" | "profile";
 
 interface Props {
   config: PaycheckConfig | null;
   payPeriods: PayPeriod[];
   categories: Category[];
   expenses: Expense[];
+  profile: Profile | null;
   onRefresh: () => Promise<void>;
 }
 
 // ─── Paycheck types ───────────────────────────────────────────────────────────
 
 interface FormState {
+  pay_type: "salary" | "hourly";
   annual_salary: number;
   pay_periods_per_year: number;
+  hourly_rate: number;
+  night_diff_type: "flat" | "pct";
+  night_diff_value: number;
+  default_day_hours: number;
+  default_night_hours: number;
   health_insurance_amount: number;
   hsa_amount: number;
   federal_tax_pct: number;
@@ -29,12 +38,18 @@ interface FormState {
 }
 
 const DEFAULT_FORM: FormState = {
-  annual_salary: 105277.44,
+  pay_type: "salary",
+  annual_salary: 60000,
   pay_periods_per_year: 24,
+  hourly_rate: 0,
+  night_diff_type: "flat",
+  night_diff_value: 0,
+  default_day_hours: 0,
+  default_night_hours: 0,
   health_insurance_amount: 0,
   hsa_amount: 0,
-  federal_tax_pct: 13.21,
-  state_tax_pct: 5.5,
+  federal_tax_pct: 12.0,
+  state_tax_pct: 5.0,
   fica_pct: 7.65,
 };
 
@@ -66,25 +81,15 @@ const TYPE_COLOR: Record<Account["type"], string> = {
   other: "#0891B2",
 };
 
-// Order matters: pre-tax deductions reduce taxable income first, then taxes are applied,
-// then post-tax deductions (e.g. Roth), leaving the net available for spending/savings split.
+// Gross comes from salary ÷ periods, or from the default day/night hours for
+// hourly users. The deduction/tax/net-split pipeline lives in lib/paycheck.ts
+// (shared with the This Period hours editor).
 function computeAmounts(f: FormState, accounts: Account[]) {
-  const gross = f.annual_salary / f.pay_periods_per_year;
-  const fixedPreTax = f.health_insurance_amount + f.hsa_amount;
-  const acctPreTax = accounts.filter((a) => a.type === "pre_tax").reduce((s, a) => s + (gross * a.pct) / 100, 0);
-  const preTaxTotal = fixedPreTax + acctPreTax;
-  const taxable = gross - preTaxTotal;
-  const taxRate = (f.federal_tax_pct + f.state_tax_pct + f.fica_pct) / 100;
-  const taxes = taxable * taxRate;
-  const postTaxTotal = accounts.filter((a) => a.type === "post_tax").reduce((s, a) => s + (gross * a.pct) / 100, 0);
-  const net = gross - preTaxTotal - taxes - postTaxTotal;
-  const netPct = accounts.filter((a) => a.type === "spending" || a.type === "other").reduce((s, a) => s + a.pct, 0);
-  const spending = accounts.filter((a) => a.type === "spending").reduce((s, a) => s + (net * a.pct) / 100, 0);
-  const withAmounts = accounts.map((a) => ({
-    ...a,
-    amount: a.type === "pre_tax" || a.type === "post_tax" ? (gross * a.pct) / 100 : (net * a.pct) / 100,
-  }));
-  return { gross, fixedPreTax, acctPreTax, preTaxTotal, taxable, taxRate, taxes, postTaxTotal, net, netPct, spending, withAmounts };
+  const gross =
+    f.pay_type === "hourly"
+      ? hourlyGross(f.hourly_rate, f.night_diff_type, f.night_diff_value, f.default_day_hours, f.default_night_hours)
+      : f.annual_salary / f.pay_periods_per_year;
+  return computeBreakdown(gross, f, accounts);
 }
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
@@ -125,15 +130,29 @@ const fmtDate = (d: string) =>
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AdminPanel({ config, payPeriods, categories, expenses, onRefresh }: Props) {
+export default function AdminPanel({ config, payPeriods, categories, expenses, profile, onRefresh }: Props) {
   const [adminTab, setAdminTab] = useState<AdminTab>("paycheck");
+
+  // ── Profile state ───────────────────────────────────────────────────────────
+  const [profileDraft, setProfileDraft] = useState({
+    full_name: profile?.full_name ?? "",
+    company: profile?.company ?? "",
+  });
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileStatus, setProfileStatus] = useState<{ msg: string; ok: boolean } | null>(null);
 
   // ── Paycheck state ──────────────────────────────────────────────────────────
   const [form, setForm] = useState<FormState>(() =>
     config
       ? {
+          pay_type: config.pay_type ?? "salary",
           annual_salary: Number(config.annual_salary),
           pay_periods_per_year: config.pay_periods_per_year,
+          hourly_rate: Number(config.hourly_rate ?? 0),
+          night_diff_type: config.night_diff_type ?? "flat",
+          night_diff_value: Number(config.night_diff_value ?? 0),
+          default_day_hours: Number(config.default_day_hours ?? 0),
+          default_night_hours: Number(config.default_night_hours ?? 0),
           health_insurance_amount: Number(config.health_insurance_amount),
           hsa_amount: Number(config.hsa_amount),
           federal_tax_pct: Number(config.federal_tax_pct),
@@ -214,10 +233,15 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
     }
     setPaycheckBusy(true);
     setPaycheckStatus(null);
-    const saveErr = await upsertPaycheckConfig(config?.id ?? null, { ...form, accounts, updated_at: new Date().toISOString() });
+    const payload = { ...form, accounts, updated_at: new Date().toISOString() };
+    const saveErr = await upsertPaycheckConfig(config?.id ?? null, payload);
     if (saveErr) { setPaycheckBusy(false); setPaycheckStatus({ msg: `Failed to save: ${saveErr}`, ok: false }); return; }
     const allocs = amounts.withAmounts.map((a) => ({ name: a.name, type: a.type, amount: Number(a.amount.toFixed(2)) }));
-    const ppErr = await applyConfigToOpenPeriods(amounts.gross, amounts.spending, allocs);
+    // Hourly periods each keep their own actual hours, so gross is recomputed
+    // per period instead of bulk-set to one value.
+    const ppErr = form.pay_type === "hourly"
+      ? await applyHourlyConfigToOpenPeriods(payload)
+      : await applyConfigToOpenPeriods(amounts.gross, amounts.spending, allocs);
     setPaycheckBusy(false);
     if (ppErr) { setPaycheckStatus({ msg: `Config saved but failed to update open periods: ${ppErr}`, ok: false }); return; }
     setPaycheckStatus({ msg: "Saved and applied to all open periods.", ok: true });
@@ -326,11 +350,31 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
     await onRefresh();
   }
 
+  // ── Profile handlers ─────────────────────────────────────────────────────────
+  async function saveProfile() {
+    if (!profile) return;
+    if (!profileDraft.full_name.trim()) {
+      setProfileStatus({ msg: "Name is required.", ok: false });
+      return;
+    }
+    setProfileBusy(true);
+    setProfileStatus(null);
+    const err = await updateProfile(profile.id, {
+      full_name: profileDraft.full_name.trim(),
+      company: profileDraft.company.trim() || null,
+    });
+    setProfileBusy(false);
+    if (err) { setProfileStatus({ msg: `Failed to save: ${err}`, ok: false }); return; }
+    setProfileStatus({ msg: "Profile saved.", ok: true });
+    await onRefresh();
+  }
+
   // ── Sub-tab nav ──────────────────────────────────────────────────────────────
   const TABS: { key: AdminTab; label: string }[] = [
     { key: "paycheck", label: "Paycheck" },
     { key: "periods", label: "Pay Periods" },
     { key: "categories", label: "Categories" },
+    { key: "profile", label: "Profile" },
   ];
 
   // ── Paycheck sub-components ──────────────────────────────────────────────────
@@ -415,11 +459,74 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
         <div className="paycheck-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={panelStyle}>
-              <SectionLabel text="Salary" />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <NumField label="Annual Gross Salary" field="annual_salary" prefix="$" step={1} />
-                <NumField label="Pay Periods / Year" field="pay_periods_per_year" step={1} min={1} />
+              <SectionLabel text="Pay" />
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                {(["salary", "hourly"] as const).map((pt) => (
+                  <button
+                    key={pt}
+                    onClick={() => setField("pay_type", pt)}
+                    style={{
+                      padding: "7px 18px",
+                      borderRadius: 7,
+                      border: `1px solid ${form.pay_type === pt ? "#3B82F6" : "#1E293B"}`,
+                      background: form.pay_type === pt ? "#132038" : "transparent",
+                      color: form.pay_type === pt ? "#F1F5F9" : "#64748B",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {pt === "salary" ? "Salary" : "Hourly"}
+                  </button>
+                ))}
               </div>
+              {form.pay_type === "salary" ? (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <NumField label="Annual Gross Salary" field="annual_salary" prefix="$" step={1} />
+                  <NumField label="Pay Periods / Year" field="pay_periods_per_year" step={1} min={1} />
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                    <NumField label="Base Hourly Rate" field="hourly_rate" prefix="$" />
+                    <div>
+                      <label style={labelStyle}>Night Differential</label>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, overflow: "hidden", flex: 1 }}>
+                          {form.night_diff_type === "flat" && (
+                            <span style={{ padding: "6px 8px", color: "#475569", fontSize: 13, borderRight: "1px solid #1E293B", flexShrink: 0 }}>$</span>
+                          )}
+                          <input
+                            type="number" step={0.01} min={0} value={form.night_diff_value}
+                            onChange={(e) => setField("night_diff_value", Number(e.target.value))}
+                            style={{ flex: 1, background: "transparent", border: "none", color: "#F1F5F9", fontSize: 13, padding: "6px 10px", outline: "none", width: 0 }}
+                          />
+                          {form.night_diff_type === "pct" && (
+                            <span style={{ padding: "6px 8px", color: "#475569", fontSize: 12, borderLeft: "1px solid #1E293B", flexShrink: 0 }}>%</span>
+                          )}
+                        </div>
+                        <select
+                          value={form.night_diff_type}
+                          onChange={(e) => setField("night_diff_type", e.target.value as FormState["night_diff_type"])}
+                          style={selectStyle}
+                        >
+                          <option value="flat">$ / hr</option>
+                          <option value="pct">% of rate</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                    <NumField label="Day Hours / Period" field="default_day_hours" step={0.25} />
+                    <NumField label="Night Hours / Period" field="default_night_hours" step={0.25} />
+                    <NumField label="Pay Periods / Year" field="pay_periods_per_year" step={1} min={1} />
+                  </div>
+                  <div style={{ fontSize: 11, color: "#374151", marginTop: 10 }}>
+                    Default schedule — actual hours are editable per pay period on the This Period tab.
+                    Night rate: {fmtMoney(nightRate(form.hourly_rate, form.night_diff_type, form.night_diff_value))}/hr.
+                  </div>
+                </>
+              )}
             </div>
             <div style={panelStyle}>
               <SectionLabel text="Tax Rates (effective, not marginal)" />
@@ -499,6 +606,21 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
           <div style={{ position: "sticky", top: 20, display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={panelStyle}>
               <SectionLabel text="Per-Period Preview" />
+              {form.pay_type === "hourly" && (
+                <>
+                  <PreviewRow
+                    label={`Day: ${form.default_day_hours} hr × ${fmtMoney(form.hourly_rate)}`}
+                    value={fmtMoney(form.default_day_hours * form.hourly_rate)}
+                    indent
+                  />
+                  <PreviewRow
+                    label={`Night: ${form.default_night_hours} hr × ${fmtMoney(nightRate(form.hourly_rate, form.night_diff_type, form.night_diff_value))}`}
+                    value={fmtMoney(form.default_night_hours * nightRate(form.hourly_rate, form.night_diff_type, form.night_diff_value))}
+                    color="#A78BFA"
+                    indent
+                  />
+                </>
+              )}
               <PreviewRow label="Gross per Period" value={fmtMoney(amounts.gross)} color="#F1F5F9" />
               {amounts.preTaxTotal > 0 && (
                 <>
@@ -829,6 +951,51 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── PROFILE TAB ─────────────────────────────────────────────────────── */}
+      {adminTab === "profile" && (
+        <div style={{ maxWidth: 480 }}>
+          {!profile ? (
+            <div style={{ ...panelStyle, textAlign: "center", color: "#475569", fontSize: 13 }}>
+              No profile found. Make sure the multi-user migration in supabase/schema.sql has been run.
+            </div>
+          ) : (
+            <div style={{ ...panelStyle, display: "flex", flexDirection: "column", gap: 14 }}>
+              <SectionLabel text="Your Profile" />
+              <div>
+                <label style={labelStyle}>Email</label>
+                <input type="email" value={profile.email} disabled
+                  style={{ ...inputStyle, color: "#64748B", cursor: "not-allowed" }} />
+                <div style={{ fontSize: 11, color: "#374151", marginTop: 4 }}>Email is your login and can&apos;t be changed here.</div>
+              </div>
+              <div>
+                <label style={labelStyle}>Name</label>
+                <input type="text" value={profileDraft.full_name}
+                  onChange={(e) => { setProfileDraft((d) => ({ ...d, full_name: e.target.value })); setProfileStatus(null); }}
+                  style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Company</label>
+                <input type="text" value={profileDraft.company} placeholder="Optional"
+                  onChange={(e) => { setProfileDraft((d) => ({ ...d, company: e.target.value })); setProfileStatus(null); }}
+                  style={inputStyle} />
+              </div>
+              <button onClick={saveProfile} disabled={profileBusy}
+                style={{ padding: "10px 20px", background: "#1D4ED8", border: "1px solid #3B82F6", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: profileBusy ? "wait" : "pointer", opacity: profileBusy ? 0.6 : 1 }}>
+                {profileBusy ? "Saving…" : "Save Profile"}
+              </button>
+              {profileStatus && (
+                <div style={{ padding: "9px 12px", borderRadius: 8, background: profileStatus.ok ? "#0D1F14" : "#1A0A0A", border: `1px solid ${profileStatus.ok ? "#166534" : "#7F1D1D"}`, fontSize: 12, color: profileStatus.ok ? "#4ADE80" : "#F87171" }}>
+                  {profileStatus.msg}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: "#374151" }}>
+                Member since {new Date(profile.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
