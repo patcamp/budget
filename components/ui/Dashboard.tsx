@@ -318,6 +318,7 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
                 <CategoryTile
                   key={c.id}
                   category={c}
+                  categories={categories}
                   actual={spendByCategory[c.id] || 0}
                   expenses={periodExpenses.filter((e) => e.category_id === c.id)}
                   locked={isLocked}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { addInvestment, deleteInvestment } from "@/components/api/investments";
+import { addInvestment, deleteInvestment, updateInvestmentPosition } from "@/components/api/investments";
 import { Investment } from "@/lib/types";
 import type { QuoteResult } from "@/app/api/quotes/route";
 
@@ -86,7 +86,21 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
 
     setAdding(true);
     setFormError(null);
-    const err = await addInvestment({ ticker, account, shares, cost_per_share: cost });
+
+    const existing = investments.find(
+      (i) => i.ticker.toUpperCase() === ticker && i.account.trim() === account
+    );
+
+    let err: string | null;
+    if (existing) {
+      const existingShares = Number(existing.shares);
+      const newShares = existingShares + shares;
+      const newCost = (existingShares * Number(existing.cost_per_share) + shares * cost) / newShares;
+      err = await updateInvestmentPosition(existing.id, newShares, newCost);
+    } else {
+      err = await addInvestment({ ticker, account, shares, cost_per_share: cost });
+    }
+
     setAdding(false);
     if (err) { setFormError(`Failed to add: ${err}`); return; }
     setForm(BLANK_FORM);

@@ -28,6 +28,79 @@ body {
   }
 }
 
+/* Admin tables (Pay Periods / Categories): grid columns on desktop,
+   stacked labeled cards on mobile. Each row is its own CSS Grid; the
+   ".*-columns" class sets the column widths shared by header + rows. */
+.admin-table-header {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1e293b;
+  margin-bottom: 4px;
+}
+
+.admin-row {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #131d2e;
+}
+
+.periods-columns {
+  grid-template-columns: 1fr 100px 110px 110px 80px;
+}
+
+.categories-columns {
+  grid-template-columns: 1fr 90px 110px 56px 70px 80px;
+}
+
+.period-edit-columns {
+  grid-template-columns: 1fr 1fr 110px 110px;
+}
+
+.category-edit-columns {
+  grid-template-columns: 32px 1fr 90px 110px 56px;
+}
+
+@media (max-width: 720px) {
+  .admin-table-header {
+    display: none;
+  }
+
+  .periods-columns,
+  .categories-columns {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 14px 0;
+  }
+
+  /* Cells opt into the "label: value" mobile treatment via data-label.
+     Cells without it (row title, action buttons) render unlabeled. */
+  .admin-row > [data-label] {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .admin-row > [data-label]::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 700;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    flex-shrink: 0;
+  }
+
+  .period-edit-columns,
+  .category-edit-columns {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
 button {
   font-family: inherit;
 }

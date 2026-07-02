@@ -11,8 +11,8 @@ Split into two subdirectories:
 |------|-------------|
 | `data.ts` | `loadPageData()` — the single page-level fetch (5 parallel queries) |
 | `dashboard.ts` | `togglePeriodLock`, `createPayPeriod` |
-| `expenses.ts` | `addExpense`, `deleteExpense` |
-| `investments.ts` | `addInvestment`, `deleteInvestment` |
+| `expenses.ts` | `addExpense`, `updateExpense`, `deleteExpense` |
+| `investments.ts` | `addInvestment`, `updateInvestmentPosition`, `deleteInvestment` |
 | `periods.ts` | `updatePayPeriod`, `deletePayPeriodWithExpenses` (deletes child expenses first — no DB cascade) |
 | `categories.ts` | `addCategory`, `updateCategory`, `deleteCategory` |
 | `admin.ts` | `upsertPaycheckConfig`, `applyConfigToOpenPeriods` (only updates unlocked periods) |
@@ -25,9 +25,9 @@ All functions return `string | null` (the error message) or a typed result objec
 
 `statementFilter` lives in Dashboard rather than Statement so the category dropdown can sit in the Statement header bar alongside the collapse button — passing it as a controlled prop to Statement.
 
-**`Statement.tsx`** renders the period's transactions grouped by date (newest first) with per-day subtotals. Supports a controlled mode (Dashboard passes `categoryFilter`/`onCategoryFilterChange`) and an uncontrolled standalone mode. In `noCard` mode (used inside Dashboard's unified card), it renders without its own outer wrapper or filter row.
+**`Statement.tsx`** renders the period's transactions grouped by date (newest first) with per-day subtotals. Supports a controlled mode (Dashboard passes `categoryFilter`/`onCategoryFilterChange`) and an uncontrolled standalone mode. In `noCard` mode (used inside Dashboard's unified card), it renders without its own outer wrapper or filter row. Each row (unlocked only) has an edit (✎) button that swaps the row for an inline form (category/amount/description/date + Save/Cancel), calling `updateExpense` then `onChanged`.
 
-**`CategoryTile.tsx`** — per-category spend card with an expandable inline expense list. Progress bar is capped at 105% so it renders visibly "full" when over budget.
+**`CategoryTile.tsx`** — per-category spend card with an expandable inline expense list. Progress bar is capped at 105% so it renders visibly "full" when over budget. Takes a `categories` prop (the full list, not just its own `category`) so the inline edit form can reassign an expense to a different category — same edit/save pattern as `Statement.tsx`, condensed for the tile's narrower width.
 
 **`AddExpenseForm.tsx`** — owns its own form state, calls `addExpense`, then calls `onAdded` (→ `onRefresh`).
 
@@ -37,7 +37,7 @@ All functions return `string | null` (the error message) or a typed result objec
 
 **`PeriodFilter.tsx`** — multi-select period picker used by Overview. Toggle-based (vs. single-select in PayPeriodPicker). Preset buttons: Last 3 / Last 6 / All Time.
 
-**`InvestmentPanel.tsx`** — "Investments" tab. Fetches live prices from `/api/quotes` on mount (and whenever the ticker list changes). Groups holdings by account. Uses `tickers.join(",")` as the `useEffect` dep to avoid infinite re-renders from array identity changes.
+**`InvestmentPanel.tsx`** — "Investments" tab. Fetches live prices from `/api/quotes` on mount (and whenever the ticker list changes). Groups holdings by account. Uses `tickers.join(",")` as the `useEffect` dep to avoid infinite re-renders from array identity changes. Adding a holding that matches an existing row's ticker (case-insensitive) + account (trimmed, case-sensitive) merges into it — shares are summed and `cost_per_share` becomes the share-weighted average — instead of inserting a duplicate row.
 
 **`AdminPanel.tsx`** — "Admin" tab with 3 sub-tabs:
 - **Paycheck** — configure salary, deductions, tax rates, and account allocations; preview the paycheck breakdown; apply to all unlocked periods.

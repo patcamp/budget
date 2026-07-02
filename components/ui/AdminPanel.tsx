@@ -547,7 +547,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
           {sortedPeriods.length > 0 && (
             <div style={{ ...panelStyle, overflowX: "auto" }}>
               {/* Table header */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 110px 110px 80px", gap: 12, paddingBottom: 10, borderBottom: "1px solid #1E293B", marginBottom: 4 }}>
+              <div className="admin-table-header periods-columns">
                 {["Period", "Status", "Gross", "Paycheck", ""].map((h) => (
                   <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>{h}</span>
                 ))}
@@ -561,7 +561,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
                 if (isEditing) {
                   return (
                     <div key={p.id} style={{ padding: "14px 0", borderBottom: "1px solid #131D2E" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 110px 110px", gap: 10, marginBottom: 10 }}>
+                      <div className="period-edit-columns" style={{ display: "grid", gap: 10, marginBottom: 10 }}>
                         <div>
                           <label style={labelStyle}>Start Date</label>
                           <input type="date" value={periodDraft.start_date} onChange={(e) => setPeriodDraft((d) => ({ ...d, start_date: e.target.value }))} style={inputStyle} />
@@ -613,20 +613,20 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
                 }
 
                 return (
-                  <div key={p.id} style={{ display: "grid", gridTemplateColumns: "1fr 100px 110px 110px 80px", gap: 12, alignItems: "center", padding: "12px 0", borderBottom: "1px solid #131D2E" }}>
+                  <div key={p.id} className="admin-row periods-columns">
                     <div>
                       <div style={{ fontSize: 13, color: "#E2E8F0", fontWeight: 500 }}>
                         {fmtDate(p.start_date)} – {fmtDate(p.end_date)}
                       </div>
                       {expCount > 0 && <div style={{ fontSize: 10, color: "#374151", marginTop: 2 }}>{expCount} expense{expCount !== 1 ? "s" : ""}</div>}
                     </div>
-                    <div>
+                    <div data-label="Status">
                       <span style={{ fontSize: 11, fontWeight: 600, color: p.is_locked ? "#4ADE80" : "#FBBF24", background: p.is_locked ? "#0D1F14" : "#1C1408", border: `1px solid ${p.is_locked ? "#166534" : "#78350F"}`, borderRadius: 5, padding: "3px 8px" }}>
                         {p.is_locked ? "Locked" : "Open"}
                       </span>
                     </div>
-                    <div style={{ fontSize: 13, color: "#94A3B8" }}>{fmtMoney(Number(p.gross_amount))}</div>
-                    <div style={{ fontSize: 13, color: "#F1F5F9" }}>{fmtMoney(Number(p.paycheck_amount))}</div>
+                    <div data-label="Gross" style={{ fontSize: 13, color: "#94A3B8" }}>{fmtMoney(Number(p.gross_amount))}</div>
+                    <div data-label="Paycheck" style={{ fontSize: 13, color: "#F1F5F9" }}>{fmtMoney(Number(p.paycheck_amount))}</div>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => startEditPeriod(p)}
                         style={{ padding: "4px 10px", background: "transparent", border: "1px solid #1E293B", borderRadius: 5, color: "#94A3B8", fontSize: 11, cursor: "pointer" }}>
@@ -656,8 +656,8 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
 
           <div style={{ ...panelStyle, overflowX: "auto" }}>
             {/* Table header */}
-            <div style={{ display: "grid", gridTemplateColumns: "32px 1fr 90px 110px 56px 70px 80px", gap: 10, paddingBottom: 10, borderBottom: "1px solid #1E293B", marginBottom: 4 }}>
-              {["", "Name", "Type", "Budget", "Order", "Txns", ""].map((h) => (
+            <div className="admin-table-header categories-columns">
+              {["Name", "Type", "Budget", "Order", "Txns", ""].map((h) => (
                 <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>{h}</span>
               ))}
             </div>
@@ -671,7 +671,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
               if (isEditing) {
                 return (
                   <div key={c.id} style={{ padding: "14px 0", borderBottom: "1px solid #131D2E" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "32px 1fr 90px 110px 56px", gap: 10, alignItems: "end", marginBottom: 10 }}>
+                    <div className="category-edit-columns" style={{ display: "grid", gap: 10, alignItems: "end", marginBottom: 10 }}>
                       <div>
                         <label style={labelStyle}>Color</label>
                         <input type="color" value={categoryDraft.color} onChange={(e) => setCategoryDraft((d) => ({ ...d, color: e.target.value }))}
@@ -736,13 +736,15 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
               }
 
               return (
-                <div key={c.id} style={{ display: "grid", gridTemplateColumns: "32px 1fr 90px 110px 56px 70px 80px", gap: 10, alignItems: "center", padding: "11px 0", borderBottom: "1px solid #131D2E" }}>
-                  <div style={{ width: 20, height: 20, borderRadius: 5, background: c.color, border: "1px solid rgba(255,255,255,0.08)" }} />
-                  <div style={{ fontSize: 13, color: "#E2E8F0", fontWeight: 500 }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: c.is_fixed ? "#A78BFA" : "#64748B" }}>{c.is_fixed ? "Fixed" : "Variable"}</div>
-                  <div style={{ fontSize: 13, color: "#94A3B8" }}>{fmtMoney(Number(c.budget_per_period))}</div>
-                  <div style={{ fontSize: 12, color: "#475569", textAlign: "center" }}>{c.sort_order}</div>
-                  <div style={{ fontSize: 12, color: txnCount > 0 ? "#64748B" : "#374151" }}>
+                <div key={c.id} className="admin-row categories-columns">
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 5, background: c.color, border: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: "#E2E8F0", fontWeight: 500 }}>{c.name}</span>
+                  </div>
+                  <div data-label="Type" style={{ fontSize: 11, color: c.is_fixed ? "#A78BFA" : "#64748B" }}>{c.is_fixed ? "Fixed" : "Variable"}</div>
+                  <div data-label="Budget" style={{ fontSize: 13, color: "#94A3B8" }}>{fmtMoney(Number(c.budget_per_period))}</div>
+                  <div data-label="Order" style={{ fontSize: 12, color: "#475569" }}>{c.sort_order}</div>
+                  <div data-label="Txns" style={{ fontSize: 12, color: txnCount > 0 ? "#64748B" : "#374151" }}>
                     {txnCount > 0 ? `${txnCount} txn${txnCount !== 1 ? "s" : ""}` : "—"}
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
@@ -771,7 +773,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
             ) : (
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #1E293B" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 12 }}>New Category</div>
-                <div style={{ display: "grid", gridTemplateColumns: "32px 1fr 90px 110px 56px", gap: 10, alignItems: "end", marginBottom: 10 }}>
+                <div className="category-edit-columns" style={{ display: "grid", gap: 10, alignItems: "end", marginBottom: 10 }}>
                   <div>
                     <label style={labelStyle}>Color</label>
                     <input type="color" value={newCategory.color} onChange={(e) => setNewCategory((n) => ({ ...n, color: e.target.value }))}

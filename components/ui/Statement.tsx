@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { deleteExpense } from "@/components/api/expenses";
+import { deleteExpense, updateExpense } from "@/components/api/expenses";
 import { Category, Expense } from "@/lib/types";
 
 interface Props {
@@ -18,6 +18,16 @@ function fmt(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+const editInputStyle: React.CSSProperties = {
+  background: "#080B12",
+  border: "1px solid #1E293B",
+  borderRadius: 6,
+  color: "#E2E8F0",
+  padding: "6px 8px",
+  fontSize: 12,
+  outline: "none",
+};
+
 export default function Statement({ expenses, categories, locked, onChanged, noCard = false, categoryFilter: controlledFilter, onCategoryFilterChange }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // Supports both controlled (Dashboard passes filter via props) and
@@ -25,6 +35,13 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
   const [internalFilter, setInternalFilter] = useState("all");
   const categoryFilter = controlledFilter ?? internalFilter;
   const setCategoryFilter = onCategoryFilterChange ?? setInternalFilter;
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCategoryId, setEditCategoryId] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const categoryById = useMemo(() => {
     const map: Record<string, Category> = {};
@@ -60,6 +77,39 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
       alert(`Failed to delete: ${err}`);
       return;
     }
+    await onChanged();
+  }
+
+  function startEdit(expense: Expense) {
+    setEditingId(expense.id);
+    setEditCategoryId(expense.category_id);
+    setEditAmount(String(Number(expense.amount)));
+    setEditDescription(expense.description || "");
+    setEditDate(expense.expense_date);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function handleSaveEdit(id: string) {
+    const numAmount = parseFloat(editAmount);
+    if (!editCategoryId || isNaN(numAmount) || numAmount === 0 || !editDate) return;
+
+    setSaving(true);
+    const err = await updateExpense(id, {
+      category_id: editCategoryId,
+      amount: numAmount,
+      description: editDescription || null,
+      expense_date: editDate,
+    });
+    setSaving(false);
+
+    if (err) {
+      alert(`Failed to save changes: ${err}`);
+      return;
+    }
+    setEditingId(null);
     await onChanged();
   }
 
@@ -118,6 +168,90 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
             </div>
             {items.map((expense) => {
               const cat = categoryById[expense.category_id];
+
+              if (editingId === expense.id) {
+                return (
+                  <div
+                    key={expense.id}
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      padding: "10px 16px",
+                      borderBottom: "1px solid #131D2E",
+                      gap: 8,
+                      background: "#0B131F",
+                    }}
+                  >
+                    <select
+                      value={editCategoryId}
+                      onChange={(e) => setEditCategoryId(e.target.value)}
+                      style={editInputStyle}
+                    >
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editAmount}
+                      onChange={(e) => setEditAmount(e.target.value)}
+                      style={{ ...editInputStyle, width: 90 }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Description"
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      style={{ ...editInputStyle, flex: "1 1 140px", minWidth: 100 }}
+                    />
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      style={editInputStyle}
+                    />
+                    <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+                      <button
+                        onClick={() => handleSaveEdit(expense.id)}
+                        disabled={saving}
+                        style={{
+                          background: "#15803D",
+                          border: "1px solid #166534",
+                          borderRadius: 6,
+                          color: "#fff",
+                          cursor: saving ? "wait" : "pointer",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: "6px 10px",
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        disabled={saving}
+                        style={{
+                          background: "transparent",
+                          border: "1px solid #1E293B",
+                          borderRadius: 6,
+                          color: "#94A3B8",
+                          cursor: "pointer",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: "6px 10px",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={expense.id}
@@ -158,21 +292,37 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#F1F5F9" }}>{fmt(Number(expense.amount))}</div>
                     {!locked && (
-                      <button
-                        onClick={() => handleDelete(expense.id)}
-                        disabled={deletingId === expense.id}
-                        style={{
-                          background: "transparent",
-                          border: "none",
-                          color: "#7F1D1D",
-                          cursor: "pointer",
-                          fontSize: 14,
-                          padding: "2px 4px",
-                        }}
-                        title="Delete"
-                      >
-                        ×
-                      </button>
+                      <>
+                        <button
+                          onClick={() => startEdit(expense)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#64748B",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            padding: "2px 4px",
+                          }}
+                          title="Edit"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          onClick={() => handleDelete(expense.id)}
+                          disabled={deletingId === expense.id}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#7F1D1D",
+                            cursor: "pointer",
+                            fontSize: 14,
+                            padding: "2px 4px",
+                          }}
+                          title="Delete"
+                        >
+                          ×
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
