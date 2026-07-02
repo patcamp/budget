@@ -185,7 +185,7 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
               <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>
                 {account}
               </div>
-              <div style={{ overflowX: "auto" }}>
+              <div className="scroll-x">
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #1E293B" }}>
@@ -251,9 +251,10 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
       )}
 
       {/* Add holding form */}
-      <div style={{ ...panelStyle, overflowX: "auto" }}>
+      <div style={panelStyle}>
         <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>Add Holding</div>
-        <div style={{ display: "grid", gridTemplateColumns: "100px 1fr 120px 140px auto", gap: 10, alignItems: "end" }}>
+        <div className="scroll-x">
+        <div className="scroll-x-content" style={{ display: "grid", gridTemplateColumns: "100px 1fr 120px 140px auto", gap: 10, alignItems: "end", minWidth: 500 }}>
           <div>
             <div style={{ fontSize: 11, color: "#64748B", marginBottom: 4, letterSpacing: "0.06em" }}>TICKER</div>
             <input
@@ -319,6 +320,7 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
           >
             {adding ? "Adding…" : "Add"}
           </button>
+        </div>
         </div>
         {formError && (
           <div style={{ marginTop: 10, fontSize: 12, color: "#F87171" }}>{formError}</div>

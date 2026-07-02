@@ -28,6 +28,39 @@ body {
   }
 }
 
+/* Shared horizontal-scroll wrapper for tables that can outgrow narrow
+   viewports. Trailing (right) padding goes on .scroll-x-content, a
+   plain child of .scroll-x, rather than on .scroll-x itself — browsers
+   collapse an overflow container's own end-side padding once scrolled
+   all the way over, so content ends up flush against the panel border. */
+.scroll-x {
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #1e293b transparent;
+}
+
+.scroll-x-content {
+  padding-right: 4px;
+}
+
+.scroll-x::-webkit-scrollbar {
+  height: 8px;
+}
+
+.scroll-x::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-x::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+.scroll-x::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
 /* Admin tables (Pay Periods / Categories): grid columns on desktop,
    stacked labeled cards on mobile. Each row is its own CSS Grid; the
    ".*-columns" class sets the column widths shared by header + rows. */
@@ -48,11 +81,11 @@ body {
 }
 
 .periods-columns {
-  grid-template-columns: 1fr 100px 110px 110px 80px;
+  grid-template-columns: 1fr 100px 110px 110px 116px;
 }
 
 .categories-columns {
-  grid-template-columns: 1fr 90px 110px 56px 70px 80px;
+  grid-template-columns: 1fr 90px 110px 56px 70px 116px;
 }
 
 .period-edit-columns {

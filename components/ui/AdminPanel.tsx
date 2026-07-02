@@ -437,41 +437,45 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
                 <NumField label="HSA" field="hsa_amount" prefix="$" />
               </div>
             </div>
-            <div style={{ ...panelStyle, overflowX: "auto" }}>
+            <div style={panelStyle}>
               <SectionLabel text="Accounts" />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 190px 100px 28px", gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 10, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>Name</span>
-                <span style={{ fontSize: 10, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>Type</span>
-                <span style={{ fontSize: 10, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>Amount</span>
-                <span />
-              </div>
-              {accounts.map((acct) => (
-                <div key={acct.id} style={{ display: "grid", gridTemplateColumns: "1fr 190px 100px 28px", gap: 8, marginBottom: 8, alignItems: "center" }}>
-                  <input type="text" value={acct.name} placeholder="Account name"
-                    onChange={(e) => updateAccount(acct.id, { name: e.target.value })} style={{ ...inputStyle }} />
-                  <select value={acct.type} onChange={(e) => updateAccount(acct.id, { type: e.target.value as Account["type"] })} style={selectStyle}>
-                    <option value="pre_tax">Pre-Tax Deduction</option>
-                    <option value="post_tax">Post-Tax (Roth)</option>
-                    <option value="spending">Spending</option>
-                    <option value="other">Savings / Investment</option>
-                  </select>
-                  <div style={{ display: "flex", alignItems: "center", background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, overflow: "hidden" }}>
-                    <input type="number" step={0.01} min={0} value={acct.pct}
-                      onChange={(e) => updateAccount(acct.id, { pct: Number(e.target.value) })}
-                      style={{ flex: 1, background: "transparent", border: "none", color: "#F1F5F9", fontSize: 13, padding: "6px 6px", outline: "none", width: 0 }} />
-                    <span style={{ fontSize: 10, color: "#374151", padding: "0 6px", flexShrink: 0 }}>%</span>
-                  </div>
-                  <button onClick={() => { setAccounts((p) => p.filter((a) => a.id !== acct.id)); setPaycheckStatus(null); }}
-                    style={{ background: "none", border: "1px solid #1E293B", borderRadius: 6, color: "#475569", fontSize: 14, cursor: "pointer", width: 28, height: 32, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>×</button>
+              <div className="scroll-x">
+              <div className="scroll-x-content">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 190px 100px 28px", gap: 8, marginBottom: 8, minWidth: 400 }}>
+                  <span style={{ fontSize: 10, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>Name</span>
+                  <span style={{ fontSize: 10, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>Type</span>
+                  <span style={{ fontSize: 10, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>Amount</span>
+                  <span />
                 </div>
-              ))}
-              <div style={{ marginTop: 2, marginBottom: 12 }}>
                 {accounts.map((acct) => (
-                  <div key={acct.id + "-h"} style={{ display: "grid", gridTemplateColumns: "1fr 190px 100px 28px", gap: 8 }}>
-                    <span /><span style={{ fontSize: 10, color: TYPE_COLOR[acct.type], paddingLeft: 2 }}>{TYPE_LABEL[acct.type]}</span>
-                    <span style={{ fontSize: 10, color: "#374151", paddingLeft: 6 }}>{TYPE_BASE[acct.type]}</span><span />
+                  <div key={acct.id} style={{ display: "grid", gridTemplateColumns: "1fr 190px 100px 28px", gap: 8, marginBottom: 8, alignItems: "center", minWidth: 400 }}>
+                    <input type="text" value={acct.name} placeholder="Account name"
+                      onChange={(e) => updateAccount(acct.id, { name: e.target.value })} style={{ ...inputStyle }} />
+                    <select value={acct.type} onChange={(e) => updateAccount(acct.id, { type: e.target.value as Account["type"] })} style={selectStyle}>
+                      <option value="pre_tax">Pre-Tax Deduction</option>
+                      <option value="post_tax">Post-Tax (Roth)</option>
+                      <option value="spending">Spending</option>
+                      <option value="other">Savings / Investment</option>
+                    </select>
+                    <div style={{ display: "flex", alignItems: "center", background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, overflow: "hidden" }}>
+                      <input type="number" step={0.01} min={0} value={acct.pct}
+                        onChange={(e) => updateAccount(acct.id, { pct: Number(e.target.value) })}
+                        style={{ flex: 1, background: "transparent", border: "none", color: "#F1F5F9", fontSize: 13, padding: "6px 6px", outline: "none", width: 0 }} />
+                      <span style={{ fontSize: 10, color: "#374151", padding: "0 6px", flexShrink: 0 }}>%</span>
+                    </div>
+                    <button onClick={() => { setAccounts((p) => p.filter((a) => a.id !== acct.id)); setPaycheckStatus(null); }}
+                      style={{ background: "none", border: "1px solid #1E293B", borderRadius: 6, color: "#475569", fontSize: 14, cursor: "pointer", width: 28, height: 32, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>×</button>
                   </div>
                 ))}
+                <div style={{ marginTop: 2, marginBottom: 12 }}>
+                  {accounts.map((acct) => (
+                    <div key={acct.id + "-h"} style={{ display: "grid", gridTemplateColumns: "1fr 190px 100px 28px", gap: 8, minWidth: 400 }}>
+                      <span /><span style={{ fontSize: 10, color: TYPE_COLOR[acct.type], paddingLeft: 2 }}>{TYPE_LABEL[acct.type]}</span>
+                      <span style={{ fontSize: 10, color: "#374151", paddingLeft: 6 }}>{TYPE_BASE[acct.type]}</span><span />
+                    </div>
+                  ))}
+                </div>
+              </div>
               </div>
               <button onClick={() => { setAccounts((p) => [...p, { id: crypto.randomUUID(), name: "", type: "other", pct: 0 }]); setPaycheckStatus(null); }}
                 style={{ background: "none", border: "1px dashed #334155", borderRadius: 8, color: "#64748B", fontSize: 12, padding: "8px 16px", cursor: "pointer", width: "100%", textAlign: "center" }}>
@@ -545,7 +549,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
             <div style={{ ...panelStyle, textAlign: "center", color: "#475569", fontSize: 13 }}>No pay periods yet.</div>
           )}
           {sortedPeriods.length > 0 && (
-            <div style={{ ...panelStyle, overflowX: "auto" }}>
+            <div style={panelStyle}>
+              <div className="scroll-x">
+              <div className="scroll-x-content">
               {/* Table header */}
               <div className="admin-table-header periods-columns">
                 {["Period", "Status", "Gross", "Paycheck", ""].map((h) => (
@@ -640,6 +646,8 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
                   </div>
                 );
               })}
+              </div>
+            </div>
             </div>
           )}
         </div>
@@ -654,7 +662,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
             </div>
           )}
 
-          <div style={{ ...panelStyle, overflowX: "auto" }}>
+          <div style={panelStyle}>
+            <div className="scroll-x">
+            <div className="scroll-x-content">
             {/* Table header */}
             <div className="admin-table-header categories-columns">
               {["Name", "Type", "Budget", "Order", "Txns", ""].map((h) => (
@@ -763,6 +773,8 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, o
                 </div>
               );
             })}
+            </div>
+            </div>
 
             {/* Add category */}
             {!addingCategory ? (
