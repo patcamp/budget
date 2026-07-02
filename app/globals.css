@@ -28,6 +28,13 @@ body {
   }
 }
 
+/* Grid items default to min-width:auto, so the Accounts table's 400px
+   min width would force the column wider than a phone viewport (clipping
+   the right edge) instead of letting .scroll-x scroll it. */
+.paycheck-grid > * {
+  min-width: 0;
+}
+
 /* Shared horizontal-scroll wrapper for tables that can outgrow narrow
    viewports. Trailing (right) padding goes on .scroll-x-content, a
    plain child of .scroll-x, rather than on .scroll-x itself — browsers
