@@ -21,6 +21,10 @@ function fmt(n: number) {
   return `$${rounded.toLocaleString()}`;
 }
 
+function fmtExact(n: number) {
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export default function Dashboard({ payPeriods, categories, expenses, onRefresh }: Props) {
   const sortedPeriods = useMemo(
     () => [...payPeriods].sort((a, b) => a.start_date.localeCompare(b.start_date)),
@@ -192,6 +196,7 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
                 {
                   label: "Actual Spend",
                   val: fmt(totalActual),
+                  sub: fmtExact(totalActual),
                   color: totalActual > income ? "#F87171" : "#F1F5F9",
                   border: "#1E293B",
                 },
@@ -207,6 +212,9 @@ export default function Dashboard({ payPeriods, categories, expenses, onRefresh 
                     {c.label}
                   </div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.val}</div>
+                  {c.sub && (
+                    <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{c.sub}</div>
+                  )}
                 </div>
               ))}
             </div>
