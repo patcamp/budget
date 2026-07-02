@@ -128,6 +128,50 @@ const fmtMoney = (n: number) =>
 const fmtDate = (d: string) =>
   new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
+// ─── Shared sub-components ───────────────────────────────────────────────────
+// Defined at module scope (not inside AdminPanel) so React keeps a stable
+// component identity across re-renders — a component redefined inside its
+// parent's function body gets a new reference every render, which makes
+// React remount its DOM (including any focused <input>) on every keystroke.
+
+function NumField({ label, value, onChange, prefix, suffix, step = 0.01, min = 0 }: {
+  label: string; value: number; onChange: (value: number) => void; prefix?: string; suffix?: string; step?: number; min?: number;
+}) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <div style={{ display: "flex", alignItems: "center", background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, overflow: "hidden" }}>
+        {prefix && <span style={{ padding: "6px 8px", color: "#475569", fontSize: 13, borderRight: "1px solid #1E293B", flexShrink: 0 }}>{prefix}</span>}
+        <input
+          type="number" step={step} min={min} value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          style={{ flex: 1, background: "transparent", border: "none", color: "#F1F5F9", fontSize: 13, padding: "6px 10px", outline: "none", width: 0 }}
+        />
+        {suffix && <span style={{ padding: "6px 8px", color: "#475569", fontSize: 12, borderLeft: "1px solid #1E293B", flexShrink: 0 }}>{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function SectionLabel({ text }: { text: string }) {
+  return (
+    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.15em", borderBottom: "1px solid #1E293B", paddingBottom: 8, marginBottom: 14 }}>
+      {text}
+    </div>
+  );
+}
+
+function PreviewRow({ label, value, color = "#94A3B8", bold = false, indent = false }: {
+  label: string; value: string; color?: string; bold?: boolean; indent?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "4px 0", paddingLeft: indent ? 12 : 0 }}>
+      <span style={{ fontSize: 12, color: indent ? "#475569" : "#64748B" }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: bold ? 700 : 500, color }}>{value}</span>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AdminPanel({ config, payPeriods, categories, expenses, profile, onRefresh }: Props) {
@@ -377,45 +421,6 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
     { key: "profile", label: "Profile" },
   ];
 
-  // ── Paycheck sub-components ──────────────────────────────────────────────────
-  function NumField({ label, field, prefix, suffix, step = 0.01, min = 0 }: {
-    label: string; field: keyof FormState; prefix?: string; suffix?: string; step?: number; min?: number;
-  }) {
-    return (
-      <div>
-        <label style={labelStyle}>{label}</label>
-        <div style={{ display: "flex", alignItems: "center", background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, overflow: "hidden" }}>
-          {prefix && <span style={{ padding: "6px 8px", color: "#475569", fontSize: 13, borderRight: "1px solid #1E293B", flexShrink: 0 }}>{prefix}</span>}
-          <input
-            type="number" step={step} min={min} value={form[field] as number}
-            onChange={(e) => setField(field, Number(e.target.value) as FormState[typeof field])}
-            style={{ flex: 1, background: "transparent", border: "none", color: "#F1F5F9", fontSize: 13, padding: "6px 10px", outline: "none", width: 0 }}
-          />
-          {suffix && <span style={{ padding: "6px 8px", color: "#475569", fontSize: 12, borderLeft: "1px solid #1E293B", flexShrink: 0 }}>{suffix}</span>}
-        </div>
-      </div>
-    );
-  }
-
-  function SectionLabel({ text }: { text: string }) {
-    return (
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.15em", borderBottom: "1px solid #1E293B", paddingBottom: 8, marginBottom: 14 }}>
-        {text}
-      </div>
-    );
-  }
-
-  function PreviewRow({ label, value, color = "#94A3B8", bold = false, indent = false }: {
-    label: string; value: string; color?: string; bold?: boolean; indent?: boolean;
-  }) {
-    return (
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "4px 0", paddingLeft: indent ? 12 : 0 }}>
-        <span style={{ fontSize: 12, color: indent ? "#475569" : "#64748B" }}>{label}</span>
-        <span style={{ fontSize: 13, fontWeight: bold ? 700 : 500, color }}>{value}</span>
-      </div>
-    );
-  }
-
   const selectStyle: React.CSSProperties = {
     background: "#080B12", border: "1px solid #1E293B", borderRadius: 6,
     color: "#F1F5F9", fontSize: 12, padding: "6px 8px", outline: "none", cursor: "pointer",
@@ -482,13 +487,13 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
               </div>
               {form.pay_type === "salary" ? (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <NumField label="Annual Gross Salary" field="annual_salary" prefix="$" step={1} />
-                  <NumField label="Pay Periods / Year" field="pay_periods_per_year" step={1} min={1} />
+                  <NumField label="Annual Gross Salary" value={form.annual_salary} onChange={(v) => setField("annual_salary", v)} prefix="$" step={1} />
+                  <NumField label="Pay Periods / Year" value={form.pay_periods_per_year} onChange={(v) => setField("pay_periods_per_year", v)} step={1} min={1} />
                 </div>
               ) : (
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                    <NumField label="Base Hourly Rate" field="hourly_rate" prefix="$" />
+                    <NumField label="Base Hourly Rate" value={form.hourly_rate} onChange={(v) => setField("hourly_rate", v)} prefix="$" />
                     <div>
                       <label style={labelStyle}>Night Differential</label>
                       <div style={{ display: "flex", gap: 6 }}>
@@ -517,9 +522,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                     </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-                    <NumField label="Day Hours / Period" field="default_day_hours" step={0.25} />
-                    <NumField label="Night Hours / Period" field="default_night_hours" step={0.25} />
-                    <NumField label="Pay Periods / Year" field="pay_periods_per_year" step={1} min={1} />
+                    <NumField label="Day Hours / Period" value={form.default_day_hours} onChange={(v) => setField("default_day_hours", v)} step={0.25} />
+                    <NumField label="Night Hours / Period" value={form.default_night_hours} onChange={(v) => setField("default_night_hours", v)} step={0.25} />
+                    <NumField label="Pay Periods / Year" value={form.pay_periods_per_year} onChange={(v) => setField("pay_periods_per_year", v)} step={1} min={1} />
                   </div>
                   <div style={{ fontSize: 11, color: "#374151", marginTop: 10 }}>
                     Default schedule — actual hours are editable per pay period on the This Period tab.
@@ -531,17 +536,17 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
             <div style={panelStyle}>
               <SectionLabel text="Tax Rates (effective, not marginal)" />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-                <NumField label="Federal" field="federal_tax_pct" suffix="%" />
-                <NumField label="State" field="state_tax_pct" suffix="%" />
-                <NumField label="FICA (SS + Medicare)" field="fica_pct" suffix="%" />
+                <NumField label="Federal" value={form.federal_tax_pct} onChange={(v) => setField("federal_tax_pct", v)} suffix="%" />
+                <NumField label="State" value={form.state_tax_pct} onChange={(v) => setField("state_tax_pct", v)} suffix="%" />
+                <NumField label="FICA (SS + Medicare)" value={form.fica_pct} onChange={(v) => setField("fica_pct", v)} suffix="%" />
               </div>
               <div style={{ fontSize: 11, color: "#374151", marginTop: 10 }}>FICA standard: 7.65% (SS 6.2% + Medicare 1.45%). Use effective rates, not marginal.</div>
             </div>
             <div style={panelStyle}>
               <SectionLabel text="Flat Pre-Tax Deductions (per period)" />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <NumField label="Health Insurance" field="health_insurance_amount" prefix="$" />
-                <NumField label="HSA" field="hsa_amount" prefix="$" />
+                <NumField label="Health Insurance" value={form.health_insurance_amount} onChange={(v) => setField("health_insurance_amount", v)} prefix="$" />
+                <NumField label="HSA" value={form.hsa_amount} onChange={(v) => setField("hsa_amount", v)} prefix="$" />
               </div>
             </div>
             <div style={panelStyle}>
