@@ -2,6 +2,7 @@
 
 - `supabase.ts` — single exported `supabase` client instance (`createClient` from `@supabase/supabase-js`), built from `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`. Imported only by `components/api/` files — UI components must not import it directly.
 - `paycheck.ts` — pure paycheck math, no Supabase: `hourlyGross`/`nightRate` (hourly pay with flat-$ or % night differential), `computeBreakdown` (gross → pre-tax → taxes → post-tax → net split across accounts), `toAllocations` (breakdown → the allocations JSONB shape). Shared by AdminPanel's config preview/save and the Dashboard hours editor — change paycheck math here, not in components.
+- `paycheck.test.ts` — vitest unit tests for the above (`npm test`). The only tests in the repo; extend them when you touch the math.
 - `types.ts` — TypeScript interfaces for every DB table and shared shape. Must stay in exact sync with `supabase/schema.sql` column-for-column (names, nullability) — there's no codegen, so if you change the schema, update both files by hand.
 
 Key types:
@@ -11,4 +12,3 @@ Key types:
 - `Category` — includes `archived`, `sort_order`, and `note`; `archived` is the soft-delete flag
 - `PaycheckConfig` — stores salary, deduction, and tax-rate fields; the `accounts` field is a JSONB array of `Account` objects
 - `Investment` — ticker, account label, shares, cost_per_share
-- `CategorySpend` — mirrors the `category_spend` SQL view, but nothing currently queries that view; per-category totals are computed client-side from raw expenses. Don't assume the view is wired up.

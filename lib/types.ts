@@ -88,16 +88,3 @@ export interface Investment {
   cost_per_share: number;
   created_at: string;
 }
-
-// Mirrors the category_spend SQL view, but nothing currently queries it —
-// per-category totals are computed client-side from the raw expenses array.
-export interface CategorySpend {
-  pay_period_id: string | null;
-  category_id: string;
-  category_name: string;
-  color: string;
-  budget_per_period: number;
-  is_fixed: boolean;
-  sort_order: number;
-  actual_spent: number;
-}

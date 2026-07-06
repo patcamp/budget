@@ -2,7 +2,7 @@
 
 Multi-user budget dashboard. Tracks spending per semi-monthly pay period, with the ability to lock a period so historical data can't be accidentally edited. Users sign in with Supabase Auth (email/password); every table is scoped per-user by `auth.uid()` RLS policies — the database, not the UI, is the data-protection layer.
 
-Stack: **Next.js 14 (App Router) + TypeScript + Supabase (incl. Supabase Auth) + Recharts**, deployed on Vercel. No test suite, no ORM/migration tool — see sub-directory CLAUDE.md files for specifics.
+Stack: **Next.js 14 (App Router) + TypeScript + Supabase (incl. Supabase Auth) + Recharts**, deployed on Vercel. No ORM/migration tool; the only tests are vitest unit tests for the pure paycheck math in `lib/paycheck.ts` — see sub-directory CLAUDE.md files for specifics.
 
 ## Commands
 
@@ -11,6 +11,7 @@ npm run dev     # local dev server, http://localhost:3000
 npm run build
 npm run start
 npm run lint
+npm test        # vitest — currently covers lib/paycheck.ts only
 ```
 
 ## Environment
@@ -34,7 +35,9 @@ Once signed in, `page.tsx` calls `loadPageData()`, which fires 6 parallel Supaba
 
 ## Conventions worth knowing before editing
 
-- Styling is inline `style={{...}}` objects throughout — no CSS modules/Tailwind (Tailwind is not installed). Dark theme palette: `#080B12` page bg, `#0F1825` panels, `#1E293B` borders, `#3B82F6`/category `color` accents.
+- Styling is inline `style={{...}}` objects — no CSS modules/Tailwind (Tailwind is not installed). The one exception is `app/globals.css`, which holds resets plus shared responsive classes (single `720px` mobile breakpoint) for what inline styles can't do: media queries, scrollbars, `::before` labels. Prefer plain readable CSS there over adding a styling library. Dark theme palette: `#080B12` page bg, `#0F1825` panels, `#1E293B` borders, `#3B82F6`/category `color` accents.
+- No hardcoded user-specific data (names, employer, salary figures) anywhere in the UI — the app must work as a blank slate for any new registrant. Titles/company come from the `profiles` row; pay figures come from `paycheck_config`.
+- Don't define React components inside another component's body — they get a new identity each render and React remounts them (focused inputs lose focus every keystroke). Hoist helpers to module scope (see `NumField` in `AdminPanel.tsx`).
 - Money values are stored as `numeric(10,2)` in Postgres but arrive as strings over the JS client in some paths — always wrap reads in `Number(...)` before arithmetic.
 - Schema changes require manually re-running SQL in the Supabase dashboard; document new SQL inline in `supabase/schema.sql`.
 - `components/api/` files must not import from each other (they're flat, single-domain). `components/ui/` files must not import `supabase` directly — all DB access goes through `components/api/`.

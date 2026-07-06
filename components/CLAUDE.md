@@ -15,7 +15,7 @@ Split into two subdirectories:
 | `dashboard.ts` | `togglePeriodLock`, `createPayPeriod` (copies hours from the active period), `updatePeriodHours` (hourly users: saves a period's actual hours and recomputes its gross/paycheck/allocations via `lib/paycheck.ts`) |
 | `expenses.ts` | `addExpense`, `updateExpense`, `deleteExpense` |
 | `investments.ts` | `addInvestment`, `updateInvestmentPosition`, `deleteInvestment` |
-| `periods.ts` | `updatePayPeriod`, `deletePayPeriodWithExpenses` (deletes child expenses first — no DB cascade) |
+| `periods.ts` | `updatePayPeriod`, `deletePayPeriodWithExpenses` (single delete — the expenses FK has `ON DELETE CASCADE`) |
 | `categories.ts` | `addCategory`, `updateCategory`, `deleteCategory` |
 | `admin.ts` | `upsertPaycheckConfig`, `applyConfigToOpenPeriods` (salary: bulk-set, only unlocked periods), `applyHourlyConfigToOpenPeriods` (hourly: per-period recompute keeping each period's own hours, backfilling nulls with config defaults) |
 
@@ -23,7 +23,7 @@ All functions return `string | null` (the error message) or a typed result objec
 
 ## ui/ — Components
 
-**`Dashboard.tsx`** is the hub for the "This Period" tab. Owns `selectedPeriodId`, `busy`, `statementOpen`, `statementFilter`, and hours-editor state. Derives `spendByCategory`, `totalBudget`, `totalActual`, `surplus`, and chart data via `useMemo`. Renders (in order): lock status bar, hours panel (hourly users only — shows the period's day/night hours + night rate, inline Edit → `updatePeriodHours`, gated by `locked`; periods with null hours display the config defaults), summary cards, `AddExpenseForm` (unlocked only), collapsible Statement card (header row holds the filter dropdown and collapse toggle), bar chart, category tile grid. Header title/company come from the `profile` prop; hours need the `paycheckConfig` prop.
+**`Dashboard.tsx`** is the hub for the "This Period" tab. Owns `selectedPeriodId`, `busy`, `statementOpen`, `statementFilter`, and hours-editor state. Derives `spendByCategory`, `totalBudget`, `totalActual`, `surplus`, and chart data via `useMemo`. Summary-card amounts are rounded to whole dollars (`fmt`), but the Actual Spend card also shows the exact cent amount as a sub-line (`fmtExact`) — deliberate, user-requested; don't remove it when touching the cards. Renders (in order): lock status bar, hours panel (hourly users only — shows the period's day/night hours + night rate, inline Edit → `updatePeriodHours`, gated by `locked`; periods with null hours display the config defaults), summary cards, `AddExpenseForm` (unlocked only), collapsible Statement card (header row holds the filter dropdown and collapse toggle), bar chart, category tile grid. Header title/company come from the `profile` prop; hours need the `paycheckConfig` prop.
 
 `statementFilter` lives in Dashboard rather than Statement so the category dropdown can sit in the Statement header bar alongside the collapse button — passing it as a controlled prop to Statement.
 
@@ -41,9 +41,9 @@ All functions return `string | null` (the error message) or a typed result objec
 
 **`InvestmentPanel.tsx`** — "Investments" tab. Fetches live prices from `/api/quotes` on mount (and whenever the ticker list changes). Groups holdings by account. Uses `tickers.join(",")` as the `useEffect` dep to avoid infinite re-renders from array identity changes. Adding a holding that matches an existing row's ticker (case-insensitive) + account (trimmed, case-sensitive) merges into it — shares are summed and `cost_per_share` becomes the share-weighted average — instead of inserting a duplicate row.
 
-**`AdminPanel.tsx`** — "Admin" tab with 4 sub-tabs:
+**`AdminPanel.tsx`** — "Admin" tab with 4 sub-tabs. Its form helpers (`NumField`, `SectionLabel`, `PreviewRow`) are defined at **module scope, not inside `AdminPanel`** — a component defined inside its parent's function body gets a new identity every render, so React remounts its DOM (and any focused `<input>` loses focus) on every keystroke. Keep any new helper components at module scope and pass `value`/`onChange` explicitly. The Paycheck layout uses the `.paycheck-grid` class and the Pay Periods/Categories tables use the `.admin-row`/`data-label` responsive pattern (both defined in `app/globals.css`). Sub-tabs:
 - **Paycheck** — Salary/Hourly pay-type toggle. Salary mode: annual salary ÷ periods. Hourly mode: base rate, night differential (flat $ or % toggle), default day/night hours per period. Both share the deductions/tax/accounts panels and preview (math lives in `lib/paycheck.ts`); "Save & Apply" bulk-sets salary periods but recomputes hourly periods individually from their own hours.
-- **Pay Periods** — edit dates/amounts inline, delete (shows expense count before confirming).
+- **Pay Periods** — edit dates/amounts inline, delete (shows expense count before confirming). Edit/Delete are disabled for locked periods (DB triggers would reject the write anyway) — unlock happens on the This Period tab.
 - **Categories** — add, edit (name, color, budget, sort order), delete (blocked when the category has any transactions — checked client-side since all expenses are already in state).
 - **Profile** — edit name/company (email read-only); saves via `updateProfile` in `api/auth.ts`.
 
@@ -55,11 +55,11 @@ Reads flow down from `app/page.tsx`. Writes happen wherever the action lives (fo
 
 ## Locking semantics
 
-`locked` (derived from `activePeriod.is_locked`) is a client-side UI gate only — RLS scopes writes to the owner but does not enforce locking. If you add a new mutation, check the `locked` prop and hide/disable the control, consistent with how `AddExpenseForm` and the delete buttons are gated.
+Locking is enforced at **two layers**. The database is the backstop: triggers (added in the 2026-07-05 hardening migration in `supabase/schema.sql`) reject any insert/update/delete on a locked period or its expenses — the only write a locked period accepts is the unlock itself. The UI layer is UX: `locked` (derived from `activePeriod.is_locked`) hides/disables mutation controls so users see a clean disabled state instead of a raw DB error. If you add a new mutation, still check the `locked` prop and gate the control (consistent with `AddExpenseForm` and the delete buttons); bulk updates against `pay_periods` must filter `.eq("is_locked", false)` or the trigger will fail the whole statement.
 
 ## Styling
 
-Inline `style` objects throughout. Reuse the existing palette:
+Inline `style` objects for component styling; anything inline styles can't express (media queries, scrollbars, `::before` labels) lives as shared classes in `app/globals.css` — see [app/CLAUDE.md](../app/CLAUDE.md) for the class inventory. Mobile behavior uses a single `720px` breakpoint; wide tables get wrapped in `.scroll-x` > `.scroll-x-content` (InvestmentPanel and AdminPanel already do this) rather than being allowed to stretch the viewport. Reuse the existing palette:
 - Page bg `#080B12`, panel bg `#0F1825`, borders `#1E293B`
 - Text: primary `#F1F5F9`/`#E2E8F0`, secondary `#94A3B8`/`#64748B`, muted `#475569`/`#374151`
 - Status: green `#4ADE80`/`#15803D` (good/locked), red `#F87171`/`#EF4444` (over budget), amber `#FBBF24` (open/in-progress)

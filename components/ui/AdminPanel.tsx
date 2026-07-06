@@ -761,12 +761,15 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                     <div data-label="Gross" style={{ fontSize: 13, color: "#94A3B8" }}>{fmtMoney(Number(p.gross_amount))}</div>
                     <div data-label="Paycheck" style={{ fontSize: 13, color: "#F1F5F9" }}>{fmtMoney(Number(p.paycheck_amount))}</div>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => startEditPeriod(p)}
-                        style={{ padding: "4px 10px", background: "transparent", border: "1px solid #1E293B", borderRadius: 5, color: "#94A3B8", fontSize: 11, cursor: "pointer" }}>
+                      {/* Locked periods are write-protected by DB triggers — unlock on the This Period tab first. */}
+                      <button onClick={() => startEditPeriod(p)} disabled={p.is_locked}
+                        title={p.is_locked ? "Unlock this period on the This Period tab to edit it" : undefined}
+                        style={{ padding: "4px 10px", background: "transparent", border: "1px solid #1E293B", borderRadius: 5, color: p.is_locked ? "#374151" : "#94A3B8", fontSize: 11, cursor: p.is_locked ? "not-allowed" : "pointer" }}>
                         Edit
                       </button>
-                      <button onClick={() => { setConfirmDeletePeriodId(p.id); setPeriodError(null); }}
-                        style={{ padding: "4px 10px", background: "transparent", border: "1px solid #1E293B", borderRadius: 5, color: "#7F1D1D", fontSize: 11, cursor: "pointer" }}>
+                      <button onClick={() => { setConfirmDeletePeriodId(p.id); setPeriodError(null); }} disabled={p.is_locked}
+                        title={p.is_locked ? "Unlock this period on the This Period tab to delete it" : undefined}
+                        style={{ padding: "4px 10px", background: "transparent", border: "1px solid #1E293B", borderRadius: 5, color: p.is_locked ? "#374151" : "#7F1D1D", fontSize: 11, cursor: p.is_locked ? "not-allowed" : "pointer" }}>
                         Delete
                       </button>
                     </div>

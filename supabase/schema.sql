@@ -266,6 +266,8 @@ alter table paycheck_config alter column annual_salary set default 0;
 -- Recreate category_spend with security_invoker so it respects
 -- RLS (default views run as owner and would bypass it), and
 -- expose user_id. Still unused by app code — kept for parity.
+-- (Superseded: dropped by the 2026-07-05 hardening migration at
+-- the bottom of this file.)
 drop view category_spend;
 create view category_spend with (security_invoker = true) as
 select
@@ -301,3 +303,88 @@ alter table paycheck_config add column default_night_hours numeric(6,2) not null
 -- and on hourly periods created before this migration.
 alter table pay_periods add column day_hours numeric(6,2);
 alter table pay_periods add column night_hours numeric(6,2);
+
+-- ============================================================
+-- DB-LEVEL HARDENING (2026-07-05)
+-- Run all statements in this section together in the SQL Editor.
+--   A. Locking is now enforced by the database, not just the UI:
+--      triggers reject writes to locked periods and their expenses.
+--   B. paycheck_config gets a real one-row-per-user constraint
+--      (previously enforced only by a LIMIT 1 in the query).
+--   C. Re-assert ON DELETE CASCADE on expenses→pay_periods
+--      (present since the original schema; this is a safety no-op).
+--   D. Drop the never-queried category_spend view.
+-- ============================================================
+
+-- ── A. LOCK ENFORCEMENT TRIGGERS ────────────────────────────
+-- Locking/unlocking itself stays allowed (the This Period tab
+-- toggle); everything else on a locked period is rejected.
+-- Note: deleting an auth user who still has locked periods will
+-- be blocked by these triggers — unlock (or delete) their locked
+-- periods first.
+create function public.enforce_period_lock_on_periods() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.is_locked then
+      raise exception 'Pay period is locked — unlock it before deleting';
+    end if;
+    return old;
+  end if;
+  -- UPDATE: allow when the row is being unlocked (new.is_locked = false);
+  -- block any edit that leaves the row locked.
+  if old.is_locked and new.is_locked then
+    raise exception 'Pay period is locked — unlock it before editing';
+  end if;
+  return new;
+end $$;
+
+create trigger enforce_period_lock_periods
+  before update or delete on pay_periods
+  for each row execute function public.enforce_period_lock_on_periods();
+
+-- Expenses: no insert/update/delete while their period is locked.
+-- Runs with invoker rights, so the pay_periods lookup goes through
+-- RLS — fine, since users only ever reference their own periods.
+-- A cascade delete of an (unlocked) period passes: by the time the
+-- child rows are deleted the period row is gone, so the lookup
+-- returns null and coalesces to "not locked".
+create function public.enforce_period_lock_on_expenses() returns trigger
+language plpgsql as $$
+declare locked boolean;
+begin
+  if tg_op in ('INSERT', 'UPDATE') then
+    select is_locked into locked from pay_periods where id = new.pay_period_id;
+    if coalesce(locked, false) then
+      raise exception 'Pay period is locked';
+    end if;
+  end if;
+  if tg_op in ('UPDATE', 'DELETE') then
+    select is_locked into locked from pay_periods where id = old.pay_period_id;
+    if coalesce(locked, false) then
+      raise exception 'Pay period is locked';
+    end if;
+  end if;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end $$;
+
+create trigger enforce_period_lock_expenses
+  before insert or update or delete on expenses
+  for each row execute function public.enforce_period_lock_on_expenses();
+
+-- ── B. ONE paycheck_config ROW PER USER ─────────────────────
+alter table paycheck_config add constraint paycheck_config_user_id_key unique (user_id);
+
+-- ── C. RE-ASSERT expenses→pay_periods CASCADE ───────────────
+alter table expenses drop constraint if exists expenses_pay_period_id_fkey;
+alter table expenses add constraint expenses_pay_period_id_fkey
+  foreign key (pay_period_id) references pay_periods(id) on delete cascade;
+
+-- ── D. DROP THE UNUSED category_spend VIEW ──────────────────
+-- Never queried by app code (per-category totals are computed
+-- client-side from raw expenses). If it's ever needed again, the
+-- security_invoker definition above is the one to resurrect.
+drop view if exists category_spend;

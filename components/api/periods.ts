@@ -13,9 +13,8 @@ export async function updatePayPeriod(id: string, payload: UpdatePayPeriodPayloa
 }
 
 export async function deletePayPeriodWithExpenses(periodId: string): Promise<string | null> {
-  // Must delete child expenses first — the FK on expenses.pay_period_id has no ON DELETE CASCADE.
-  const { error: expErr } = await supabase.from("expenses").delete().eq("pay_period_id", periodId);
-  if (expErr) return expErr.message;
+  // The FK on expenses.pay_period_id has ON DELETE CASCADE, so this one
+  // atomic delete removes the period's expenses with it.
   const { error } = await supabase.from("pay_periods").delete().eq("id", periodId);
   return error?.message ?? null;
 }
