@@ -14,6 +14,31 @@ body {
   max-width: 100%;
 }
 
+/* Top header: tabs + account controls in one row on desktop; on mobile
+   the tabs share the first line and the name/sign-out wraps to its own
+   full-width line so it can't get pushed off-screen. */
+.header-tab {
+  padding: 12px 20px;
+}
+
+.header-user {
+  padding: 0 16px;
+}
+
+@media (max-width: 720px) {
+  .header-tab {
+    flex: 1;
+    padding: 12px 8px;
+  }
+
+  .header-user {
+    flex-basis: 100%;
+    justify-content: space-between;
+    border-top: 1px solid #131d2e;
+    padding: 9px 16px;
+  }
+}
+
 /* Paycheck tab: side-by-side on desktop, stacked on mobile */
 .paycheck-grid {
   display: grid;

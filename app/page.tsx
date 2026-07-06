@@ -133,7 +133,7 @@ export default function Home() {
 
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", background: "#080B12", borderBottom: "1px solid #1E293B" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", background: "#080B12", borderBottom: "1px solid #1E293B" }}>
         {[
           { key: "period" as const, label: "This Period" },
           { key: "overview" as const, label: "Overview" },
@@ -142,9 +142,9 @@ export default function Home() {
         ].map((tab) => (
           <button
             key={tab.key}
+            className="header-tab"
             onClick={() => setView(tab.key)}
             style={{
-              padding: "12px 20px",
               border: "none",
               borderBottom: `2px solid ${view === tab.key ? "#3B82F6" : "transparent"}`,
               background: "transparent",
@@ -157,7 +157,7 @@ export default function Home() {
             {tab.label}
           </button>
         ))}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12, padding: "0 16px" }}>
+        <div className="header-user" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
             {displayName}
           </span>
