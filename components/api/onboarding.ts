@@ -79,8 +79,13 @@ export async function setupNewUser(pay: OnboardingPayInfo): Promise<string | nul
     brokerage_amount: 0,
     savings_amount: 0,
     allocations: [{ name: "Checking", type: "spending", amount: Number(net.toFixed(2)) }],
-    day_hours: isHourly ? dayHours : null,
-    night_hours: isHourly ? nightHours : null,
+    // Left null (not the resolved dayHours/nightHours used for the gross
+    // preview above) so this period still tracks the config's default
+    // schedule — and picks up future Admin changes via
+    // applyHourlyConfigToOpenPeriods's null-backfill — until the user
+    // explicitly edits its hours.
+    day_hours: null,
+    night_hours: null,
     is_locked: false,
   });
   return ppErr?.message ?? null;

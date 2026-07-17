@@ -286,8 +286,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
     const saveErr = await upsertPaycheckConfig(config?.id ?? null, payload);
     if (saveErr) { setPaycheckBusy(false); setPaycheckStatus({ msg: `Failed to save: ${saveErr}`, ok: false }); return; }
     const allocs = amounts.withAmounts.map((a) => ({ name: a.name, type: a.type, amount: Number(a.amount.toFixed(2)) }));
-    // Hourly periods each keep their own actual hours, so gross is recomputed
-    // per period instead of bulk-set to one value.
+    // Hourly recomputes gross from the config's default hours rather than
+    // amounts.gross (which is the same value for hourly, kept separate so
+    // salary's applyConfigToOpenPeriods signature stays unchanged).
     const ppErr = form.pay_type === "hourly"
       ? await applyHourlyConfigToOpenPeriods(payload)
       : await applyConfigToOpenPeriods(amounts.gross, amounts.spending, allocs);
@@ -543,10 +544,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <NumField label="Day Hours / Period" value={form.default_day_hours} onChange={(v) => setField("default_day_hours", v)} step={0.25} />
                     <NumField label="Night Hours / Period" value={form.default_night_hours} onChange={(v) => setField("default_night_hours", v)} step={0.25} />
-                    <NumField label="Pay Periods / Year" value={form.pay_periods_per_year} onChange={(v) => setField("pay_periods_per_year", v)} step={1} min={1} />
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 10 }}>
                     Default schedule — actual hours are editable per pay period on the This Period tab.

@@ -53,33 +53,29 @@ export async function applyConfigToOpenPeriods(
   return error?.message ?? null;
 }
 
-// Hourly counterpart of applyConfigToOpenPeriods: each unlocked period
-// keeps its own actual hours (falling back to the config defaults and
-// backfilling them when null), so gross is recomputed per period rather
-// than bulk-set to one value.
+// Hourly counterpart of applyConfigToOpenPeriods: gross/spending is
+// computed once from the config's default day/night hours (same inputs as
+// the Per-Period Preview), then bulk-set on every unlocked period along
+// with those default hours — so every open period matches the preview
+// exactly, the same way salary bulk-sets one value to all open periods.
 export async function applyHourlyConfigToOpenPeriods(payload: PaycheckConfigPayload): Promise<string | null> {
-  const { data, error } = await supabase
+  const gross = hourlyGross(
+    payload.hourly_rate,
+    payload.night_diff_type,
+    payload.night_diff_value,
+    payload.default_day_hours,
+    payload.default_night_hours
+  );
+  const breakdown = computeBreakdown(gross, payload, payload.accounts);
+  const { error } = await supabase
     .from("pay_periods")
-    .select("id, day_hours, night_hours")
+    .update({
+      day_hours: payload.default_day_hours,
+      night_hours: payload.default_night_hours,
+      gross_amount: Number(gross.toFixed(2)),
+      paycheck_amount: Number(breakdown.spending.toFixed(2)),
+      allocations: toAllocations(breakdown),
+    })
     .eq("is_locked", false);
-  if (error) return error.message;
-
-  for (const p of data ?? []) {
-    const dayHours = p.day_hours != null ? Number(p.day_hours) : payload.default_day_hours;
-    const nightHours = p.night_hours != null ? Number(p.night_hours) : payload.default_night_hours;
-    const gross = hourlyGross(payload.hourly_rate, payload.night_diff_type, payload.night_diff_value, dayHours, nightHours);
-    const breakdown = computeBreakdown(gross, payload, payload.accounts);
-    const { error: updateError } = await supabase
-      .from("pay_periods")
-      .update({
-        day_hours: dayHours,
-        night_hours: nightHours,
-        gross_amount: Number(gross.toFixed(2)),
-        paycheck_amount: Number(breakdown.spending.toFixed(2)),
-        allocations: toAllocations(breakdown),
-      })
-      .eq("id", p.id);
-    if (updateError) return updateError.message;
-  }
-  return null;
+  return error?.message ?? null;
 }

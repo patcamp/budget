@@ -17,7 +17,7 @@ Split into two subdirectories:
 | `investments.ts` | `addInvestment`, `updateInvestmentPosition`, `deleteInvestment` |
 | `periods.ts` | `updatePayPeriod`, `deletePayPeriodWithExpenses` (single delete — the expenses FK has `ON DELETE CASCADE`) |
 | `categories.ts` | `addCategory`, `updateCategory`, `deleteCategory` |
-| `admin.ts` | `upsertPaycheckConfig`, `applyConfigToOpenPeriods` (salary: bulk-set, only unlocked periods), `applyHourlyConfigToOpenPeriods` (hourly: per-period recompute keeping each period's own hours, backfilling nulls with config defaults) |
+| `admin.ts` | `upsertPaycheckConfig`, `applyConfigToOpenPeriods` (salary: bulk-set, only unlocked periods), `applyHourlyConfigToOpenPeriods` (hourly: same bulk-set to all unlocked periods, but computed from the config's default day/night hours; also resets each period's day_hours/night_hours to that default schedule) |
 
 All functions return `string | null` (the error message) or a typed result object. None call each other.
 
