@@ -460,26 +460,29 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
       </div>
 
       {/* Sub-tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid var(--border)", marginBottom: 24 }}>
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setAdminTab(t.key)}
-            style={{
-              padding: "9px 18px",
-              border: "none",
-              borderBottom: `2px solid ${adminTab === t.key ? "var(--accent)" : "transparent"}`,
-              background: "transparent",
-              color: adminTab === t.key ? "var(--text)" : "var(--text-muted)",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              marginBottom: -1,
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="scroll-x" style={{ borderBottom: "1px solid var(--border)", marginBottom: 24 }}>
+        <div className="scroll-x-content" style={{ display: "flex", width: "max-content" }}>
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setAdminTab(t.key)}
+              style={{
+                padding: "9px 18px",
+                border: "none",
+                borderBottom: `2px solid ${adminTab === t.key ? "var(--accent)" : "transparent"}`,
+                background: "transparent",
+                color: adminTab === t.key ? "var(--text)" : "var(--text-muted)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                marginBottom: -1,
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── PAYCHECK TAB ────────────────────────────────────────────────────── */}
