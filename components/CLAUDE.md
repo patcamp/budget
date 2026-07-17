@@ -59,8 +59,12 @@ Locking is enforced at **two layers**. The database is the backstop: triggers (a
 
 ## Styling
 
-Inline `style` objects for component styling; anything inline styles can't express (media queries, scrollbars, `::before` labels) lives as shared classes in `app/globals.css` — see [app/CLAUDE.md](../app/CLAUDE.md) for the class inventory. Mobile behavior uses a single `720px` breakpoint; wide tables get wrapped in `.scroll-x` > `.scroll-x-content` (InvestmentPanel and AdminPanel already do this) rather than being allowed to stretch the viewport. Reuse the existing palette:
-- Page bg `#080B12`, panel bg `#0F1825`, borders `#1E293B`
-- Text: primary `#F1F5F9`/`#E2E8F0`, secondary `#94A3B8`/`#64748B`, muted `#475569`/`#374151`
-- Status: green `#4ADE80`/`#15803D` (good/locked), red `#F87171`/`#EF4444` (over budget), amber `#FBBF24` (open/in-progress)
-- Category accent colors come from `category.color` (set per-row in DB), not hardcoded per component
+Inline `style` objects for component styling; anything inline styles can't express (media queries, scrollbars, `::before` labels) lives as shared classes in `app/globals.css` — see [app/CLAUDE.md](../app/CLAUDE.md) for the class inventory. Mobile behavior uses a single `720px` breakpoint; wide tables get wrapped in `.scroll-x` > `.scroll-x-content` (InvestmentPanel and AdminPanel already do this) rather than being allowed to stretch the viewport.
+
+Structural/UI colors (backgrounds, borders, text, accent) must use the CSS custom properties defined in `app/globals.css`, never hardcoded hex — the app supports 10 user-selectable themes (`lib/themes.ts`, applied via `data-theme` on `<html>`), and a hardcoded hex bypasses theming for whichever component has it:
+- Backgrounds: `var(--bg-page)`, `var(--bg-panel)`, `var(--bg-panel-alt)` (selected/hover fill)
+- Borders: `var(--border)`, `var(--border-soft)` (subtle dividers), `var(--border-strong)` (dashed CTAs, hover)
+- Text: `var(--text)`/`var(--text-body)` (primary), `var(--text-secondary)`/`var(--text-muted)`, `var(--text-faint)` (least emphasis)
+- Accent: `var(--accent)`, `var(--accent-strong)` (button fill), `var(--accent-text)` (text/icon color on an accent-filled button — do not assume white, some themes need dark text there)
+
+Status colors are the one exception — kept as literal hex, constant across all themes, because they encode meaning (over-budget, locked, in-progress) rather than brand: green `#4ADE80`/`#15803D` (good/locked), red `#F87171`/`#EF4444` (over budget), amber `#FBBF24` (open/in-progress). Category accent colors come from `category.color` (set per-row in DB), not hardcoded per component, and are likewise never themed.

@@ -79,7 +79,7 @@ export async function getProfile(): Promise<{ data: Profile | null; error: strin
 
 export async function updateProfile(
   id: string,
-  payload: { full_name?: string | null; company?: string | null }
+  payload: { full_name?: string | null; company?: string | null; theme?: string }
 ): Promise<string | null> {
   const { error } = await supabase.from("profiles").update(payload).eq("id", id);
   return error?.message ?? null;

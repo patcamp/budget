@@ -39,9 +39,9 @@ export default function PayPeriodPicker({ periods, selectedId, onSelect, onCreat
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
-                borderColor: active ? "#3B82F6" : "#1E293B",
-                background: active ? "#1D4ED8" : "#0F1825",
-                color: active ? "#fff" : "#64748B",
+                borderColor: active ? "var(--accent)" : "var(--border)",
+                background: active ? "var(--accent-strong)" : "var(--bg-panel)",
+                color: active ? "var(--accent-text)" : "var(--text-muted)",
               }}
             >
               {p.is_locked && <span style={{ fontSize: 10 }}>🔒</span>}
@@ -56,9 +56,9 @@ export default function PayPeriodPicker({ periods, selectedId, onSelect, onCreat
         style={{
           padding: "7px 14px",
           borderRadius: 7,
-          border: "1px dashed #334155",
+          border: "1px dashed var(--border-strong)",
           background: "transparent",
-          color: "#94A3B8",
+          color: "var(--text-muted)",
           fontSize: 12,
           fontWeight: 600,
           cursor: busy ? "wait" : "pointer",

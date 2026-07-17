@@ -19,10 +19,10 @@ function fmt(n: number) {
 }
 
 const editInputStyle: React.CSSProperties = {
-  background: "#080B12",
-  border: "1px solid #1E293B",
+  background: "var(--bg-page)",
+  border: "1px solid var(--border)",
   borderRadius: 6,
-  color: "#E2E8F0",
+  color: "var(--text-body)",
   padding: "6px 8px",
   fontSize: 12,
   outline: "none",
@@ -118,10 +118,10 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
       value={categoryFilter}
       onChange={(e) => setCategoryFilter(e.target.value)}
       style={{
-        background: "#080B12",
-        border: "1px solid #1E293B",
+        background: "var(--bg-page)",
+        border: "1px solid var(--border)",
         borderRadius: 7,
-        color: "#E2E8F0",
+        color: "var(--text-body)",
         padding: "7px 10px",
         fontSize: 12,
         outline: "none",
@@ -139,7 +139,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
   const rows = (
     <>
       {expensesByDate.length === 0 && (
-        <div style={{ padding: 24, textAlign: "center", color: "#475569", fontSize: 12 }}>
+        <div style={{ padding: 24, textAlign: "center", color: "var(--text-faint)", fontSize: 12 }}>
           No transactions in this category.
         </div>
       )}
@@ -153,18 +153,18 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                 justifyContent: "space-between",
                 alignItems: "baseline",
                 padding: "10px 16px",
-                background: "#080B12",
-                borderBottom: "1px solid #1E293B",
+                background: "var(--bg-page)",
+                borderBottom: "1px solid var(--border)",
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", letterSpacing: "0.04em" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.04em" }}>
                 {new Date(date + "T00:00:00").toLocaleDateString("en-US", {
                   weekday: "short",
                   month: "short",
                   day: "numeric",
                 })}
               </div>
-              <div style={{ fontSize: 11, color: "#374151" }}>{fmt(dayTotal)}</div>
+              <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{fmt(dayTotal)}</div>
             </div>
             {items.map((expense) => {
               const cat = categoryById[expense.category_id];
@@ -178,9 +178,9 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                       flexWrap: "wrap",
                       alignItems: "center",
                       padding: "10px 16px",
-                      borderBottom: "1px solid #131D2E",
+                      borderBottom: "1px solid var(--border-soft)",
                       gap: 8,
-                      background: "#0B131F",
+                      background: "var(--bg-page)",
                     }}
                   >
                     <select
@@ -219,10 +219,10 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                         onClick={() => handleSaveEdit(expense.id)}
                         disabled={saving}
                         style={{
-                          background: "#15803D",
-                          border: "1px solid #166534",
+                          background: "var(--accent-strong)",
+                          border: "1px solid var(--accent)",
                           borderRadius: 6,
-                          color: "#fff",
+                          color: "var(--accent-text)",
                           cursor: saving ? "wait" : "pointer",
                           fontSize: 11,
                           fontWeight: 600,
@@ -236,9 +236,9 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                         disabled={saving}
                         style={{
                           background: "transparent",
-                          border: "1px solid #1E293B",
+                          border: "1px solid var(--border)",
                           borderRadius: 6,
-                          color: "#94A3B8",
+                          color: "var(--text-muted)",
                           cursor: "pointer",
                           fontSize: 11,
                           fontWeight: 600,
@@ -260,7 +260,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                     justifyContent: "space-between",
                     alignItems: "center",
                     padding: "10px 16px",
-                    borderBottom: "1px solid #131D2E",
+                    borderBottom: "1px solid var(--border-soft)",
                     gap: 10,
                   }}
                 >
@@ -270,7 +270,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                         width: 8,
                         height: 8,
                         borderRadius: "50%",
-                        background: cat?.color || "#475569",
+                        background: cat?.color || "var(--text-faint)",
                         flexShrink: 0,
                       }}
                     />
@@ -278,7 +278,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                       <div
                         style={{
                           fontSize: 13,
-                          color: "#E2E8F0",
+                          color: "var(--text-body)",
                           whiteSpace: "nowrap",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
@@ -286,11 +286,11 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                       >
                         {expense.description || cat?.name || "Expense"}
                       </div>
-                      <div style={{ fontSize: 10, color: "#475569" }}>{cat?.name || "Uncategorized"}</div>
+                      <div style={{ fontSize: 10, color: "var(--text-faint)" }}>{cat?.name || "Uncategorized"}</div>
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#F1F5F9" }}>{fmt(Number(expense.amount))}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmt(Number(expense.amount))}</div>
                     {!locked && (
                       <>
                         <button
@@ -298,7 +298,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                           style={{
                             background: "transparent",
                             border: "none",
-                            color: "#64748B",
+                            color: "var(--text-muted)",
                             cursor: "pointer",
                             fontSize: 13,
                             padding: "2px 4px",
@@ -338,7 +338,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
     return (
       <div>
         {expenses.length === 0 ? (
-          <div style={{ padding: 24, textAlign: "center", color: "#475569", fontSize: 12 }}>
+          <div style={{ padding: 24, textAlign: "center", color: "var(--text-faint)", fontSize: 12 }}>
             No transactions yet this period.
           </div>
         ) : (
@@ -352,12 +352,12 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
     return (
       <div
         style={{
-          background: "#0F1825",
-          border: "1px solid #1E293B",
+          background: "var(--bg-panel)",
+          border: "1px solid var(--border)",
           borderRadius: 14,
           padding: 24,
           textAlign: "center",
-          color: "#475569",
+          color: "var(--text-faint)",
           fontSize: 12,
         }}
       >
@@ -369,7 +369,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>{filterSelect}</div>
-      <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 14, overflow: "hidden" }}>
+      <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
         {rows}
       </div>
     </div>

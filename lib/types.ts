@@ -13,6 +13,8 @@ export interface Profile {
   full_name: string | null;
   company: string | null;
   created_at: string;
+  // One of the theme ids in lib/themes.ts; defaults to "dark" in the DB.
+  theme: string;
 }
 
 export interface PayPeriod {

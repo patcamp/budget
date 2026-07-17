@@ -115,14 +115,14 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
     await onRefresh();
   }
 
-  const panelStyle: React.CSSProperties = { background: "#0F1825", border: "1px solid #1E293B", borderRadius: 12, padding: 20 };
-  const gainColor = (n: number) => n >= 0 ? "#4ADE80" : "#F87171";
+  const panelStyle: React.CSSProperties = { background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 };
+  const gainColor = (n: number) => n >= 0 ? "var(--success-text)" : "var(--danger-text)";
 
   const inputStyle: React.CSSProperties = {
-    background: "#080B12",
-    border: "1px solid #1E293B",
+    background: "var(--bg-page)",
+    border: "1px solid var(--border)",
     borderRadius: 7,
-    color: "#F1F5F9",
+    color: "var(--text)",
     fontSize: 13,
     padding: "8px 10px",
     outline: "none",
@@ -132,23 +132,23 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
     <div style={{ padding: "20px 24px", paddingBottom: 60 }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#F1F5F9", marginBottom: 4 }}>Investments</div>
-        <div style={{ fontSize: 12, color: "#475569", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Investments</div>
+        <div style={{ fontSize: 12, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 8 }}>
           Live prices via Yahoo Finance
-          {loadingQuotes && <span style={{ color: "#FBBF24" }}>· refreshing…</span>}
+          {loadingQuotes && <span style={{ color: "var(--warning-text)" }}>· refreshing…</span>}
         </div>
       </div>
 
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
         {[
-          { label: "Total Invested", val: fmtDollar(totalCost), color: "#F1F5F9" },
-          { label: "Market Value", val: fmtDollar(totalValue), color: "#F1F5F9" },
+          { label: "Total Invested", val: fmtDollar(totalCost), color: "var(--text)" },
+          { label: "Market Value", val: fmtDollar(totalValue), color: "var(--text)" },
           { label: "Total Gain / Loss", val: fmtDollar(totalGain), color: gainColor(totalGain) },
           { label: "Total Return", val: fmtPct(totalReturn), color: gainColor(totalReturn) },
         ].map((c) => (
-          <div key={c.label} style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 10, padding: "14px 18px" }}>
-            <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>{c.label}</div>
+          <div key={c.label} style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 18px" }}>
+            <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>{c.label}</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{investments.length ? c.val : "—"}</div>
           </div>
         ))}
@@ -159,16 +159,16 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
           {/* By-account rollup */}
           {byAccount.length > 1 && (
             <div style={{ ...panelStyle, marginBottom: 16 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>By Account</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>By Account</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
                 {byAccount.map(([account, holdings]) => {
                   const acctValue = holdings.reduce((s, h) => s + h.value, 0);
                   const acctCost = holdings.reduce((s, h) => s + h.costBasis, 0);
                   const acctGain = acctValue - acctCost;
                   return (
-                    <div key={account} style={{ background: "#080B12", border: "1px solid #1E293B", borderRadius: 8, padding: "12px 14px" }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8", marginBottom: 6 }}>{account}</div>
-                      <div style={{ fontSize: 17, fontWeight: 700, color: "#F1F5F9", marginBottom: 2 }}>{fmtDollar(acctValue)}</div>
+                    <div key={account} style={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>{account}</div>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>{fmtDollar(acctValue)}</div>
                       <div style={{ fontSize: 11, color: gainColor(acctGain) }}>
                         {fmtDollar(acctGain)} {acctCost > 0 ? `(${fmtPct((acctGain / acctCost) * 100)})` : ""}
                       </div>
@@ -182,15 +182,15 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
           {/* Holdings table per account */}
           {byAccount.map(([account, holdings]) => (
             <div key={account} style={{ ...panelStyle, marginBottom: 16 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>
                 {account}
               </div>
               <div className="scroll-x">
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid #1E293B" }}>
+                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
                       {["Ticker", "Shares", "Avg Cost", "Price", "Value", "Gain / Loss", "Return", ""].map((h) => (
-                        <th key={h} style={{ textAlign: h === "" ? "center" : "right", padding: "0 10px 10px", fontSize: 10, fontWeight: 600, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
+                        <th key={h} style={{ textAlign: h === "" ? "center" : "right", padding: "0 10px 10px", fontSize: 10, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
                           {h === "Ticker" ? <span style={{ textAlign: "left", display: "block" }}>{h}</span> : h}
                         </th>
                       ))}
@@ -198,24 +198,24 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
                   </thead>
                   <tbody>
                     {holdings.map((holding) => (
-                      <tr key={holding.id} style={{ borderBottom: "1px solid #131D2E" }}>
+                      <tr key={holding.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
                         <td style={{ padding: "10px 10px" }}>
-                          <div style={{ fontWeight: 700, color: "#F1F5F9" }}>{holding.ticker}</div>
-                          <div style={{ fontSize: 11, color: "#475569", marginTop: 1, whiteSpace: "nowrap", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>{holding.quoteName !== holding.ticker ? holding.quoteName : ""}</div>
+                          <div style={{ fontWeight: 700, color: "var(--text)" }}>{holding.ticker}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 1, whiteSpace: "nowrap", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>{holding.quoteName !== holding.ticker ? holding.quoteName : ""}</div>
                         </td>
-                        <td style={{ textAlign: "right", padding: "10px 10px", color: "#94A3B8" }}>{Number(holding.shares).toLocaleString("en-US", { maximumFractionDigits: 4 })}</td>
-                        <td style={{ textAlign: "right", padding: "10px 10px", color: "#64748B" }}>{fmtDollar(Number(holding.cost_per_share))}</td>
-                        <td style={{ textAlign: "right", padding: "10px 10px", color: "#F1F5F9", whiteSpace: "nowrap" }}>
+                        <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text-muted)" }}>{Number(holding.shares).toLocaleString("en-US", { maximumFractionDigits: 4 })}</td>
+                        <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text-muted)" }}>{fmtDollar(Number(holding.cost_per_share))}</td>
+                        <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text)", whiteSpace: "nowrap" }}>
                           {holding.price > 0 ? (
                             <>
                               {fmtDollar(holding.price)}
                               <span style={{ display: "block", fontSize: 10, color: gainColor(holding.changePercent) }}>{fmtPct(holding.changePercent)} today</span>
                             </>
                           ) : (
-                            <span style={{ color: "#374151" }}>—</span>
+                            <span style={{ color: "var(--text-faint)" }}>—</span>
                           )}
                         </td>
-                        <td style={{ textAlign: "right", padding: "10px 10px", fontWeight: 600, color: "#F1F5F9" }}>
+                        <td style={{ textAlign: "right", padding: "10px 10px", fontWeight: 600, color: "var(--text)" }}>
                           {holding.price > 0 ? fmtDollar(holding.value) : "—"}
                         </td>
                         <td style={{ textAlign: "right", padding: "10px 10px", color: gainColor(holding.gainLoss), fontWeight: 600 }}>
@@ -245,18 +245,18 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
       )}
 
       {investments.length === 0 && (
-        <div style={{ ...panelStyle, textAlign: "center", color: "#475569", fontSize: 13, marginBottom: 20 }}>
+        <div style={{ ...panelStyle, textAlign: "center", color: "var(--text-faint)", fontSize: 13, marginBottom: 20 }}>
           No holdings yet. Add one below.
         </div>
       )}
 
       {/* Add holding form */}
       <div style={panelStyle}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>Add Holding</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>Add Holding</div>
         <div className="scroll-x">
         <div className="scroll-x-content" style={{ display: "grid", gridTemplateColumns: "100px 1fr 120px 140px auto", gap: 10, alignItems: "end", minWidth: 500 }}>
           <div>
-            <div style={{ fontSize: 11, color: "#64748B", marginBottom: 4, letterSpacing: "0.06em" }}>TICKER</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>TICKER</div>
             <input
               style={{ ...inputStyle, width: "100%", textTransform: "uppercase", boxSizing: "border-box" }}
               placeholder="VOO"
@@ -266,7 +266,7 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
             />
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#64748B", marginBottom: 4, letterSpacing: "0.06em" }}>ACCOUNT</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>ACCOUNT</div>
             <input
               style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
               placeholder="Roth 401k"
@@ -276,7 +276,7 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
             />
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#64748B", marginBottom: 4, letterSpacing: "0.06em" }}>SHARES</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>SHARES</div>
             <input
               type="number"
               step="0.0001"
@@ -289,7 +289,7 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
             />
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#64748B", marginBottom: 4, letterSpacing: "0.06em" }}>AVG COST / SHARE</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>AVG COST / SHARE</div>
             <input
               type="number"
               step="0.01"
@@ -306,10 +306,10 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
             disabled={adding}
             style={{
               padding: "8px 18px",
-              background: "#1D4ED8",
-              border: "1px solid #3B82F6",
+              background: "var(--accent-strong)",
+              border: "1px solid var(--accent)",
               borderRadius: 8,
-              color: "#fff",
+              color: "var(--accent-text)",
               fontSize: 13,
               fontWeight: 600,
               cursor: adding ? "wait" : "pointer",
@@ -323,9 +323,9 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
         </div>
         </div>
         {formError && (
-          <div style={{ marginTop: 10, fontSize: 12, color: "#F87171" }}>{formError}</div>
+          <div style={{ marginTop: 10, fontSize: 12, color: "var(--danger-text)" }}>{formError}</div>
         )}
-        <div style={{ fontSize: 11, color: "#374151", marginTop: 10 }}>
+        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 10 }}>
           Prices are fetched from Yahoo Finance. Use standard ticker symbols (VOO, VTI, VTSAX, AAPL, BTC-USD, etc.).
         </div>
       </div>

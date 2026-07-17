@@ -5,6 +5,7 @@ import { loadPageData } from "@/components/api/data";
 import { setupNewUser } from "@/components/api/onboarding";
 import { getSession, onAuthChange, signOut, AuthSession } from "@/components/api/auth";
 import { PayPeriod, Category, Expense, PaycheckConfig, Investment, Profile } from "@/lib/types";
+import { isValidTheme } from "@/lib/themes";
 import Dashboard from "@/components/ui/Dashboard";
 import Overview from "@/components/ui/Overview";
 import AdminPanel from "@/components/ui/AdminPanel";
@@ -90,9 +91,20 @@ export default function Home() {
     }
   }, [session, loadAll]);
 
+  // Applies the signed-in user's saved theme and keeps the localStorage
+  // cache (read synchronously in app/layout.tsx, before hydration) in
+  // sync so the next page load/AuthScreen paints in the right theme
+  // immediately instead of flashing dark first.
+  useEffect(() => {
+    const theme = profile?.theme && isValidTheme(profile.theme) ? profile.theme : null;
+    if (!theme) return;
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("budget-theme", theme);
+  }, [profile]);
+
   if (!authReady) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748B" }}>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
         Loading…
       </div>
     );
@@ -104,7 +116,7 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748B" }}>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
         Loading your budget…
       </div>
     );
@@ -114,14 +126,14 @@ export default function Home() {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#F87171", padding: 24, textAlign: "center", gap: 12 }}>
         <div style={{ fontSize: 16, fontWeight: 700 }}>Couldn&apos;t load data</div>
-        <div style={{ fontSize: 13, color: "#94A3B8", maxWidth: 480 }}>{error}</div>
-        <div style={{ fontSize: 12, color: "#475569", maxWidth: 480 }}>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 480 }}>{error}</div>
+        <div style={{ fontSize: 12, color: "var(--text-faint)", maxWidth: 480 }}>
           Check that NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set correctly, and that
           you&apos;ve run supabase/schema.sql (including the multi-user migration) in your Supabase project.
         </div>
         <button
           onClick={() => signOut()}
-          style={{ marginTop: 8, padding: "8px 18px", background: "transparent", border: "1px solid #1E293B", borderRadius: 8, color: "#94A3B8", fontSize: 12, cursor: "pointer" }}
+          style={{ marginTop: 8, padding: "8px 18px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}
         >
           Sign out
         </button>
@@ -133,7 +145,7 @@ export default function Home() {
 
   return (
     <>
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", background: "#080B12", borderBottom: "1px solid #1E293B" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", background: "var(--bg-page)", borderBottom: "1px solid var(--border)" }}>
         {[
           { key: "period" as const, label: "This Period" },
           { key: "overview" as const, label: "Overview" },
@@ -146,9 +158,9 @@ export default function Home() {
             onClick={() => setView(tab.key)}
             style={{
               border: "none",
-              borderBottom: `2px solid ${view === tab.key ? "#3B82F6" : "transparent"}`,
+              borderBottom: `2px solid ${view === tab.key ? "var(--accent)" : "transparent"}`,
               background: "transparent",
-              color: view === tab.key ? "#F1F5F9" : "#64748B",
+              color: view === tab.key ? "var(--text)" : "var(--text-muted)",
               fontSize: 13,
               fontWeight: 600,
               cursor: "pointer",
@@ -158,12 +170,12 @@ export default function Home() {
           </button>
         ))}
         <div className="header-user" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
             {displayName}
           </span>
           <button
             onClick={() => signOut()}
-            style={{ padding: "5px 12px", background: "transparent", border: "1px solid #1E293B", borderRadius: 6, color: "#94A3B8", fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}
+            style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}
           >
             Sign out
           </button>

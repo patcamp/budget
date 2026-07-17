@@ -18,10 +18,10 @@ function fmt(n: number) {
 }
 
 const editInputStyle: React.CSSProperties = {
-  background: "#0F1825",
-  border: "1px solid #1E293B",
+  background: "var(--bg-panel)",
+  border: "1px solid var(--border)",
   borderRadius: 5,
-  color: "#E2E8F0",
+  color: "var(--text-body)",
   padding: "4px 6px",
   fontSize: 11,
   outline: "none",
@@ -90,8 +90,8 @@ export default function CategoryTile({ category, categories, actual, expenses, l
   return (
     <div
       style={{
-        background: "#0F1825",
-        border: `1px solid ${over ? "#450A0A" : expanded ? category.color + "44" : "#1E293B"}`,
+        background: "var(--bg-panel)",
+        border: `1px solid ${over ? "var(--danger-border)" : expanded ? category.color + "44" : "var(--border)"}`,
         borderRadius: 10,
         padding: "14px 16px",
         transition: "border-color 0.15s",
@@ -102,18 +102,18 @@ export default function CategoryTile({ category, categories, actual, expenses, l
         style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, cursor: "pointer" }}
       >
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1" }}>{category.name}</div>
-          <div style={{ fontSize: 10, color: "#374151", marginTop: 2 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>{category.name}</div>
+          <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 2 }}>
             {category.is_fixed ? "● Fixed" : "○ Variable"} · {expenses.length} {expenses.length === 1 ? "entry" : "entries"}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: over ? "#F87171" : "#F1F5F9" }}>{fmt(actual)}</div>
-          <div style={{ fontSize: 10, color: "#475569" }}>of {fmt(budgeted)}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: over ? "var(--danger-text)" : "var(--text)" }}>{fmt(actual)}</div>
+          <div style={{ fontSize: 10, color: "var(--text-faint)" }}>of {fmt(budgeted)}</div>
         </div>
       </div>
 
-      <div style={{ height: 4, background: "#1E293B", borderRadius: 2 }}>
+      <div style={{ height: 4, background: "var(--border)", borderRadius: 2 }}>
         <div
           style={{
             height: "100%",
@@ -124,23 +124,23 @@ export default function CategoryTile({ category, categories, actual, expenses, l
           }}
         />
       </div>
-      <div style={{ fontSize: 10, color: over ? "#EF4444" : "#4ADE80", marginTop: 6 }}>
+      <div style={{ fontSize: 10, color: over ? "var(--danger-text)" : "var(--success-text)", marginTop: 6 }}>
         {over ? `▲ ${fmt(actual - budgeted)} over` : `▼ ${fmt(budgeted - actual)} under`}
       </div>
 
       {category.note && (
         <div
           onClick={() => setExpanded(!expanded)}
-          style={{ fontSize: 10, color: "#374151", marginTop: 8, cursor: "pointer" }}
+          style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 8, cursor: "pointer" }}
         >
           {expanded ? "▲ hide" : "▼ details"}
         </div>
       )}
 
       {expanded && (
-        <div style={{ marginTop: 10, borderTop: "1px solid #1E293B", paddingTop: 10 }}>
+        <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
           {category.note && (
-            <div style={{ fontSize: 11, color: "#94A3B8", lineHeight: 1.6, marginBottom: expenses.length ? 10 : 0 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: expenses.length ? 10 : 0 }}>
               {category.note}
             </div>
           )}
@@ -157,7 +157,7 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                         flexWrap: "wrap",
                         alignItems: "center",
                         gap: 5,
-                        background: "#080B12",
+                        background: "var(--bg-page)",
                         borderRadius: 6,
                         padding: "8px 10px",
                       }}
@@ -198,10 +198,10 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                           onClick={() => handleSaveEdit(e.id)}
                           disabled={saving}
                           style={{
-                            background: "#15803D",
-                            border: "1px solid #166534",
+                            background: "var(--accent-strong)",
+                            border: "1px solid var(--accent)",
                             borderRadius: 5,
-                            color: "#fff",
+                            color: "var(--accent-text)",
                             cursor: saving ? "wait" : "pointer",
                             fontSize: 10,
                             fontWeight: 600,
@@ -215,9 +215,9 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                           disabled={saving}
                           style={{
                             background: "transparent",
-                            border: "1px solid #1E293B",
+                            border: "1px solid var(--border)",
                             borderRadius: 5,
-                            color: "#94A3B8",
+                            color: "var(--text-muted)",
                             cursor: "pointer",
                             fontSize: 10,
                             fontWeight: 600,
@@ -239,18 +239,18 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                       justifyContent: "space-between",
                       alignItems: "center",
                       fontSize: 11,
-                      color: "#94A3B8",
-                      background: "#080B12",
+                      color: "var(--text-muted)",
+                      background: "var(--bg-page)",
                       borderRadius: 6,
                       padding: "6px 10px",
                     }}
                   >
                     <div>
-                      <span style={{ color: "#CBD5E1", fontWeight: 600 }}>{fmt(Number(e.amount))}</span>
+                      <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>{fmt(Number(e.amount))}</span>
                       {e.description && <span> — {e.description}</span>}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ color: "#374151" }}>
+                      <span style={{ color: "var(--text-faint)" }}>
                         {new Date(e.expense_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
                       {!locked && (
@@ -263,7 +263,7 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                             style={{
                               background: "transparent",
                               border: "none",
-                              color: "#475569",
+                              color: "var(--text-faint)",
                               cursor: "pointer",
                               fontSize: 12,
                               padding: "2px 4px",

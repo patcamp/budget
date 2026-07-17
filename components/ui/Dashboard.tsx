@@ -131,20 +131,20 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
       {/* HEADER */}
       <div
         style={{
-          background: "linear-gradient(160deg,#0F1825 0%,#080B12 100%)",
-          borderBottom: "1px solid #1E293B",
+          background: "linear-gradient(160deg,var(--bg-panel) 0%,var(--bg-page) 100%)",
+          borderBottom: "1px solid var(--border)",
           padding: "28px 24px 20px",
         }}
       >
         {profile?.company && (
-          <div style={{ fontSize: 10, letterSpacing: "0.18em", color: "#475569", textTransform: "uppercase", marginBottom: 6 }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.18em", color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 6 }}>
             {profile.company}
           </div>
         )}
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: "#F8FAFC", letterSpacing: "-0.5px" }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.5px" }}>
           {profile?.full_name ? `${profile.full_name.split(" ")[0]}'s Budget` : "My Budget"}
         </h1>
-        <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
           Live pay-period tracker
         </div>
 
@@ -159,7 +159,7 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
 
       <div style={{ padding: "20px 24px 0" }}>
         {!activePeriod && (
-          <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 12, padding: 24, textAlign: "center", color: "#64748B" }}>
+          <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--text-muted)" }}>
             No pay periods yet. Run the seed SQL or create one to get started.
           </div>
         )}
@@ -172,8 +172,8 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                background: isLocked ? "#0D1F14" : "#0F1825",
-                border: `1px solid ${isLocked ? "#166534" : "#1E293B"}`,
+                background: isLocked ? "var(--success-bg)" : "var(--bg-panel)",
+                border: `1px solid ${isLocked ? "var(--success-border)" : "var(--border)"}`,
                 borderRadius: 10,
                 padding: "12px 18px",
                 marginBottom: 18,
@@ -187,13 +187,13 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
                     width: 8,
                     height: 8,
                     borderRadius: "50%",
-                    background: isLocked ? "#4ADE80" : "#FBBF24",
+                    background: isLocked ? "var(--success-text)" : "var(--warning-text)",
                   }}
                 />
-                <div style={{ fontSize: 13, fontWeight: 600, color: isLocked ? "#4ADE80" : "#FBBF24" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: isLocked ? "var(--success-text)" : "var(--warning-text)" }}>
                   {isLocked ? "Locked — Final" : "Open — Tracking in progress"}
                 </div>
-                <div style={{ fontSize: 12, color: "#475569" }}>
+                <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
                   {new Date(activePeriod.start_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   {" – "}
                   {new Date(activePeriod.end_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
@@ -206,9 +206,9 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
                   padding: "7px 16px",
                   borderRadius: 7,
                   border: "1px solid",
-                  borderColor: isLocked ? "#334155" : "#166534",
-                  background: isLocked ? "#1E293B" : "#15803D",
-                  color: isLocked ? "#CBD5E1" : "#fff",
+                  borderColor: isLocked ? "var(--border-strong)" : "var(--accent)",
+                  background: isLocked ? "var(--border)" : "var(--accent-strong)",
+                  color: isLocked ? "var(--text-secondary)" : "var(--accent-text)",
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: busy ? "wait" : "pointer",
@@ -220,34 +220,34 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
             </div>
 
             {isLocked && (
-              <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, padding: "0 4px" }}>
+              <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 16, padding: "0 4px" }}>
                 This period is locked. Expenses are read-only. Unlock if you need to correct something.
               </div>
             )}
 
             {/* HOURS (hourly pay only) */}
             {isHourly && paycheckConfig && (
-              <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 10, padding: "12px 18px", marginBottom: 18 }}>
+              <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 18px", marginBottom: 18 }}>
                 {!hoursEditing ? (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                      <span style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                         Hours This Period
                       </span>
-                      <span style={{ fontSize: 13, color: "#F1F5F9", fontWeight: 600 }}>
+                      <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
                         {dayHours} day
                       </span>
-                      <span style={{ fontSize: 13, color: "#A78BFA", fontWeight: 600 }}>
+                      <span style={{ fontSize: 13, color: "var(--purple-text)", fontWeight: 600 }}>
                         {nightHours} night
                       </span>
-                      <span style={{ fontSize: 11, color: "#475569" }}>
+                      <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
                         night rate ${nightRate(Number(paycheckConfig.hourly_rate), paycheckConfig.night_diff_type, Number(paycheckConfig.night_diff_value)).toFixed(2)}/hr
                       </span>
                     </div>
                     {!isLocked && (
                       <button
                         onClick={startEditHours}
-                        style={{ padding: "5px 14px", background: "transparent", border: "1px solid #1E293B", borderRadius: 6, color: "#94A3B8", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+                        style={{ padding: "5px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
                       >
                         Edit Hours
                       </button>
@@ -257,29 +257,29 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
                   <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
                     {(["day", "night"] as const).map((kind) => (
                       <div key={kind}>
-                        <label style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>
+                        <label style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>
                           {kind} hours
                         </label>
                         <input
                           type="number" step="0.25" min="0" value={hoursDraft[kind]}
                           onChange={(e) => setHoursDraft((d) => ({ ...d, [kind]: e.target.value }))}
-                          style={{ background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, color: "#F1F5F9", fontSize: 13, padding: "6px 10px", outline: "none", width: 90 }}
+                          style={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text)", fontSize: 13, padding: "6px 10px", outline: "none", width: 90 }}
                         />
                       </div>
                     ))}
                     <button
                       onClick={saveHours} disabled={busy}
-                      style={{ padding: "7px 16px", background: "#1D4ED8", border: "1px solid #3B82F6", borderRadius: 6, color: "#fff", fontSize: 12, fontWeight: 600, cursor: busy ? "wait" : "pointer" }}
+                      style={{ padding: "7px 16px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 6, color: "var(--accent-text)", fontSize: 12, fontWeight: 600, cursor: busy ? "wait" : "pointer" }}
                     >
                       {busy ? "Saving…" : "Save"}
                     </button>
                     <button
                       onClick={() => { setHoursEditing(false); setHoursError(null); }}
-                      style={{ padding: "7px 16px", background: "transparent", border: "1px solid #1E293B", borderRadius: 6, color: "#94A3B8", fontSize: 12, cursor: "pointer" }}
+                      style={{ padding: "7px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}
                     >
                       Cancel
                     </button>
-                    {hoursError && <span style={{ fontSize: 12, color: "#F87171" }}>{hoursError}</span>}
+                    {hoursError && <span style={{ fontSize: 12, color: "var(--danger-text)" }}>{hoursError}</span>}
                   </div>
                 )}
               </div>
@@ -288,29 +288,29 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
             {/* SUMMARY CARDS */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
               {[
-                { label: "Paycheck", val: fmt(income), color: "#F1F5F9", border: "#1E293B" },
-                { label: "Budget Total", val: fmt(totalBudget), color: "#A78BFA", border: "#2D1B69" },
+                { label: "Paycheck", val: fmt(income), color: "var(--text)", border: "var(--border)" },
+                { label: "Budget Total", val: fmt(totalBudget), color: "var(--purple-text)", border: "var(--border)" },
                 {
                   label: "Actual Spend",
                   val: fmt(totalActual),
                   sub: fmtExact(totalActual),
-                  color: totalActual > income ? "#F87171" : "#F1F5F9",
-                  border: "#1E293B",
+                  color: totalActual > income ? "var(--danger-text)" : "var(--text)",
+                  border: "var(--border)",
                 },
                 {
                   label: "Surplus / Buffer",
                   val: `${surplus >= 0 ? "+" : ""}${fmt(surplus)}`,
-                  color: surplus >= 0 ? "#4ADE80" : "#F87171",
+                  color: surplus >= 0 ? "var(--success-text)" : "var(--danger-text)",
                   border: surplus >= 0 ? "#14532D" : "#7F1D1D",
                 },
               ].map((c) => (
-                <div key={c.label} style={{ background: "#0F1825", border: `1px solid ${c.border}`, borderRadius: 10, padding: "14px 18px" }}>
-                  <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
+                <div key={c.label} style={{ background: "var(--bg-panel)", border: `1px solid ${c.border}`, borderRadius: 10, padding: "14px 18px" }}>
+                  <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
                     {c.label}
                   </div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.val}</div>
                   {c.sub && (
-                    <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{c.sub}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>{c.sub}</div>
                   )}
                 </div>
               ))}
@@ -326,25 +326,25 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
             )}
 
             {/* STATEMENT */}
-            <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 12, overflow: "hidden", marginTop: 20, marginBottom: 20 }}>
+            <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", marginTop: 20, marginBottom: 20 }}>
               <div
                 onClick={() => setStatementOpen((o) => !o)}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  background: "#080B12",
-                  borderBottom: statementOpen ? "1px solid #1E293B" : "none",
+                  background: "var(--bg-page)",
+                  borderBottom: statementOpen ? "1px solid var(--border)" : "none",
                   padding: "12px 18px",
                   cursor: "pointer",
                   gap: 12,
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.12em", textTransform: "uppercase" }}>
                     Statement
                   </span>
-                  <span style={{ fontSize: 12, color: "#475569", fontWeight: 500 }}>
+                  <span style={{ fontSize: 12, color: "var(--text-faint)", fontWeight: 500 }}>
                     {periodExpenses.length} transaction{periodExpenses.length !== 1 ? "s" : ""}
                   </span>
                 </div>
@@ -357,10 +357,10 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
                       flex: 1,
                       maxWidth: 200,
                       marginLeft: "auto",
-                      background: "#0F1825",
-                      border: "1px solid #1E293B",
+                      background: "var(--bg-panel)",
+                      border: "1px solid var(--border)",
                       borderRadius: 6,
-                      color: "#94A3B8",
+                      color: "var(--text-muted)",
                       fontSize: 12,
                       padding: "5px 8px",
                       outline: "none",
@@ -373,7 +373,7 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
                     ))}
                   </select>
                 )}
-                <span style={{ fontSize: 12, color: "#94A3B8", fontWeight: 700, flexShrink: 0 }}>
+                <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 700, flexShrink: 0 }}>
                   {statementOpen ? "▲" : "▼"}
                 </span>
               </div>
@@ -391,20 +391,20 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
             </div>
 
             {/* BAR CHART */}
-            <div style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 14, padding: "20px 12px 12px", marginBottom: 20, marginTop: 20 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 14, paddingLeft: 6 }}>
+            <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 12px 12px", marginBottom: 20, marginTop: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 14, paddingLeft: 6 }}>
                 Actual vs. Budget — This Period
               </div>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={barData} margin={{ top: 0, right: 4, left: -24, bottom: 56 }}>
-                  <XAxis dataKey="name" tick={{ fill: "#475569", fontSize: 9 }} angle={-40} textAnchor="end" interval={0} />
-                  <YAxis tick={{ fill: "#475569", fontSize: 9 }} />
+                  <XAxis dataKey="name" tick={{ fill: "var(--text-faint)", fontSize: 9 }} angle={-40} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fill: "var(--text-faint)", fontSize: 9 }} />
                   <Tooltip
-                    contentStyle={{ background: "#080B12", border: "1px solid #1E293B", borderRadius: 8, fontSize: 12 }}
-                    labelStyle={{ color: "#F1F5F9", fontWeight: 700, marginBottom: 4 }}
+                    contentStyle={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: "var(--text)", fontWeight: 700, marginBottom: 4 }}
                     formatter={(val: number, name: string) => [fmt(val), name === "actual" ? "Actual" : "Budget"]}
                   />
-                  <Bar dataKey="budget" name="budget" fill="#1E293B" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="budget" name="budget" fill="var(--border)" radius={[3, 3, 0, 0]} />
                   <Bar dataKey="actual" name="actual" radius={[3, 3, 0, 0]}>
                     {barData.map((entry) => (
                       <Cell key={entry.fullName} fill={entry.actual > entry.budget ? "#EF4444" : entry.color} opacity={0.85} />
@@ -415,7 +415,7 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
             </div>
 
             {/* CATEGORY TILES */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>
               Categories
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))", gap: 10 }}>

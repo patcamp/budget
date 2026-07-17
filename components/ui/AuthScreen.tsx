@@ -8,10 +8,10 @@ import { signIn, signUp } from "@/components/api/auth";
 // signIn/signUp establishes a session.
 
 const inputStyle: React.CSSProperties = {
-  background: "#080B12",
-  border: "1px solid #1E293B",
+  background: "var(--bg-page)",
+  border: "1px solid var(--border)",
   borderRadius: 6,
-  color: "#F1F5F9",
+  color: "var(--text)",
   fontSize: 13,
   padding: "9px 12px",
   outline: "none",
@@ -21,7 +21,7 @@ const inputStyle: React.CSSProperties = {
 
 const labelStyle: React.CSSProperties = {
   fontSize: 11,
-  color: "#64748B",
+  color: "var(--text-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.08em",
   display: "block",
@@ -103,15 +103,15 @@ export default function AuthScreen() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#080B12", padding: 24 }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-page)", padding: 24 }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9" }}>Budget</div>
-          <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>Pay-period spending tracker</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text)" }}>Budget</div>
+          <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>Pay-period spending tracker</div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ background: "#0F1825", border: "1px solid #1E293B", borderRadius: 12, padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", marginBottom: 2 }}>
+        <form onSubmit={handleSubmit} style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>
             {mode === "login" ? "Sign in" : "Create your account"}
           </div>
 
@@ -156,9 +156,9 @@ export default function AuthScreen() {
                         flex: 1,
                         padding: "8px 0",
                         borderRadius: 7,
-                        border: `1px solid ${payType === pt ? "#3B82F6" : "#1E293B"}`,
-                        background: payType === pt ? "#132038" : "transparent",
-                        color: payType === pt ? "#F1F5F9" : "#64748B",
+                        border: `1px solid ${payType === pt ? "var(--accent)" : "var(--border)"}`,
+                        background: payType === pt ? "var(--bg-panel-alt)" : "transparent",
+                        color: payType === pt ? "var(--text)" : "var(--text-muted)",
                         fontSize: 12,
                         fontWeight: 600,
                         cursor: "pointer",
@@ -173,33 +173,33 @@ export default function AuthScreen() {
               {payType === "salary" ? (
                 <div>
                   <label style={labelStyle}>Annual Salary (optional)</label>
-                  <div style={{ display: "flex", alignItems: "center", background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, overflow: "hidden" }}>
-                    <span style={{ padding: "9px 10px", color: "#475569", fontSize: 13, borderRight: "1px solid #1E293B" }}>$</span>
+                  <div style={{ display: "flex", alignItems: "center", background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 6, overflow: "hidden" }}>
+                    <span style={{ padding: "9px 10px", color: "var(--text-faint)", fontSize: 13, borderRight: "1px solid var(--border)" }}>$</span>
                     <input type="number" step="1" min="0" value={salary} placeholder="60000"
                       onChange={(e) => setSalary(e.target.value)}
-                      style={{ flex: 1, background: "transparent", border: "none", color: "#F1F5F9", fontSize: 13, padding: "9px 12px", outline: "none", width: 0 }} />
+                      style={{ flex: 1, background: "transparent", border: "none", color: "var(--text)", fontSize: 13, padding: "9px 12px", outline: "none", width: 0 }} />
                   </div>
-                  <div style={{ fontSize: 11, color: "#374151", marginTop: 4 }}>Used to set up your first paycheck estimate — adjustable later in Admin.</div>
+                  <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4 }}>Used to set up your first paycheck estimate — adjustable later in Admin.</div>
                 </div>
               ) : (
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div>
                       <label style={labelStyle}>Hourly Rate</label>
-                      <div style={{ display: "flex", alignItems: "center", background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, overflow: "hidden" }}>
-                        <span style={{ padding: "9px 10px", color: "#475569", fontSize: 13, borderRight: "1px solid #1E293B" }}>$</span>
+                      <div style={{ display: "flex", alignItems: "center", background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 6, overflow: "hidden" }}>
+                        <span style={{ padding: "9px 10px", color: "var(--text-faint)", fontSize: 13, borderRight: "1px solid var(--border)" }}>$</span>
                         <input type="number" step="0.01" min="0" value={hourlyRate} placeholder="38.00"
                           onChange={(e) => setHourlyRate(e.target.value)}
-                          style={{ flex: 1, background: "transparent", border: "none", color: "#F1F5F9", fontSize: 13, padding: "9px 12px", outline: "none", width: 0 }} />
+                          style={{ flex: 1, background: "transparent", border: "none", color: "var(--text)", fontSize: 13, padding: "9px 12px", outline: "none", width: 0 }} />
                       </div>
                     </div>
                     <div>
                       <label style={labelStyle}>Night Diff ($/hr)</label>
-                      <div style={{ display: "flex", alignItems: "center", background: "#080B12", border: "1px solid #1E293B", borderRadius: 6, overflow: "hidden" }}>
-                        <span style={{ padding: "9px 10px", color: "#475569", fontSize: 13, borderRight: "1px solid #1E293B" }}>$</span>
+                      <div style={{ display: "flex", alignItems: "center", background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 6, overflow: "hidden" }}>
+                        <span style={{ padding: "9px 10px", color: "var(--text-faint)", fontSize: 13, borderRight: "1px solid var(--border)" }}>$</span>
                         <input type="number" step="0.01" min="0" value={nightDiff} placeholder="4.50"
                           onChange={(e) => setNightDiff(e.target.value)}
-                          style={{ flex: 1, background: "transparent", border: "none", color: "#F1F5F9", fontSize: 13, padding: "9px 12px", outline: "none", width: 0 }} />
+                          style={{ flex: 1, background: "transparent", border: "none", color: "var(--text)", fontSize: 13, padding: "9px 12px", outline: "none", width: 0 }} />
                       </div>
                     </div>
                     <div>
@@ -213,7 +213,7 @@ export default function AuthScreen() {
                         onChange={(e) => setNightHours(e.target.value)} style={inputStyle} />
                     </div>
                   </div>
-                  <div style={{ fontSize: 11, color: "#374151" }}>
+                  <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
                     All optional — your typical schedule per pay period. A percent-based night differential and everything else can be set later in Admin.
                   </div>
                 </>
@@ -222,33 +222,33 @@ export default function AuthScreen() {
           )}
 
           {error && (
-            <div style={{ padding: "9px 12px", borderRadius: 8, background: "#1A0A0A", border: "1px solid #7F1D1D", fontSize: 12, color: "#F87171" }}>
+            <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: 12, color: "var(--danger-text)" }}>
               {error}
             </div>
           )}
           {notice && (
-            <div style={{ padding: "9px 12px", borderRadius: 8, background: "#0D1F14", border: "1px solid #166534", fontSize: 12, color: "#4ADE80" }}>
+            <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--success-bg)", border: "1px solid var(--success-border)", fontSize: 12, color: "var(--success-text)" }}>
               {notice}
             </div>
           )}
 
           <button type="submit" disabled={busy}
-            style={{ padding: "11px 20px", background: "#1D4ED8", border: "1px solid #3B82F6", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
+            style={{ padding: "11px 20px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 8, color: "var(--accent-text)", fontSize: 13, fontWeight: 700, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
             {busy ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
           </button>
 
-          <div style={{ textAlign: "center", fontSize: 12, color: "#64748B" }}>
+          <div style={{ textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
             {mode === "login" ? (
               <>No account?{" "}
                 <button type="button" onClick={() => switchMode("register")}
-                  style={{ background: "none", border: "none", color: "#3B82F6", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                  style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
                   Register
                 </button>
               </>
             ) : (
               <>Already have an account?{" "}
                 <button type="button" onClick={() => switchMode("login")}
-                  style={{ background: "none", border: "none", color: "#3B82F6", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                  style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
                   Sign in
                 </button>
               </>

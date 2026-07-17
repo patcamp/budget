@@ -388,3 +388,10 @@ alter table expenses add constraint expenses_pay_period_id_fkey
 -- client-side from raw expenses). If it's ever needed again, the
 -- security_invoker definition above is the one to resurrect.
 drop view if exists category_spend;
+
+-- ── E. profiles.theme (Admin → Theme picker) ────────────────
+-- One of the ids in lib/themes.ts ("dark", "light", "yellow", "mint",
+-- "ocean", "rose", "lavender", "forest", "sunset", "graphite"). No
+-- app-level enum/check constraint — validated client-side against
+-- lib/themes.ts before it's ever written.
+alter table profiles add column if not exists theme text not null default 'dark';
