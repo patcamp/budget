@@ -1,31 +1,47 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { loadPageData } from "@/components/api/data";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { loadPageData, PageData } from "@/components/api/data";
 import { setupNewUser } from "@/components/api/onboarding";
 import { getSession, onAuthChange, signOut, AuthSession } from "@/components/api/auth";
-import { PayPeriod, Category, Expense, PaycheckConfig, Investment, Profile } from "@/lib/types";
 import { isValidTheme } from "@/lib/themes";
-import Dashboard from "@/components/ui/Dashboard";
-import Overview from "@/components/ui/Overview";
-import AdminPanel from "@/components/ui/AdminPanel";
-import InvestmentPanel from "@/components/ui/InvestmentPanel";
 import AuthScreen from "@/components/ui/AuthScreen";
 
-export default function Home() {
+interface BudgetData extends PageData {
+  onRefresh: () => Promise<void>;
+}
+
+const BudgetDataContext = createContext<BudgetData | null>(null);
+
+export function useBudgetData(): BudgetData {
+  const ctx = useContext(BudgetDataContext);
+  if (!ctx) throw new Error("useBudgetData must be used within the (app) layout");
+  return ctx;
+}
+
+const TABS = [
+  { href: "/", label: "This Period" },
+  { href: "/overview", label: "Overview" },
+  { href: "/investments", label: "Investments" },
+  { href: "/admin", label: "Admin" },
+];
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [session, setSession] = useState<AuthSession | null>(null);
   // Distinguishes "checking localStorage for a session" from "signed out"
   // so the AuthScreen doesn't flash for already-signed-in users.
   const [authReady, setAuthReady] = useState(false);
-  const [payPeriods, setPayPeriods] = useState<PayPeriod[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [paycheckConfig, setPaycheckConfig] = useState<PaycheckConfig | null>(null);
-  const [investments, setInvestments] = useState<Investment[]>([]);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [payPeriods, setPayPeriods] = useState<PageData["payPeriods"]>([]);
+  const [categories, setCategories] = useState<PageData["categories"]>([]);
+  const [expenses, setExpenses] = useState<PageData["expenses"]>([]);
+  const [paycheckConfig, setPaycheckConfig] = useState<PageData["paycheckConfig"]>(null);
+  const [investments, setInvestments] = useState<PageData["investments"]>([]);
+  const [profile, setProfile] = useState<PageData["profile"]>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"period" | "overview" | "investments" | "admin">("period");
 
   useEffect(() => {
     getSession().then((s) => {
@@ -87,7 +103,6 @@ export default function Home() {
       setPaycheckConfig(null);
       setInvestments([]);
       setProfile(null);
-      setView("period");
     }
   }, [session, loadAll]);
 
@@ -144,30 +159,29 @@ export default function Home() {
   const displayName = profile?.full_name || session.user.email || "Account";
 
   return (
-    <>
+    <BudgetDataContext.Provider
+      value={{ payPeriods, categories, expenses, paycheckConfig, investments, profile, error: null, onRefresh: loadAll }}
+    >
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", background: "var(--bg-page)", borderBottom: "1px solid var(--border)" }}>
-        {[
-          { key: "period" as const, label: "This Period" },
-          { key: "overview" as const, label: "Overview" },
-          { key: "investments" as const, label: "Investments" },
-          { key: "admin" as const, label: "Admin" },
-        ].map((tab) => (
-          <button
-            key={tab.key}
+        {TABS.map((tab) => (
+          <Link
+            key={tab.href}
+            href={tab.href}
             className="header-tab"
-            onClick={() => setView(tab.key)}
             style={{
+              display: "inline-block",
               border: "none",
-              borderBottom: `2px solid ${view === tab.key ? "var(--accent)" : "transparent"}`,
+              borderBottom: `2px solid ${pathname === tab.href ? "var(--accent)" : "transparent"}`,
               background: "transparent",
-              color: view === tab.key ? "var(--text)" : "var(--text-muted)",
+              color: pathname === tab.href ? "var(--text)" : "var(--text-muted)",
               fontSize: 13,
               fontWeight: 600,
               cursor: "pointer",
+              textDecoration: "none",
             }}
           >
             {tab.label}
-          </button>
+          </Link>
         ))}
         <div className="header-user" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
@@ -181,32 +195,7 @@ export default function Home() {
           </button>
         </div>
       </div>
-      {view === "period" && (
-        <Dashboard
-          payPeriods={payPeriods}
-          categories={categories}
-          expenses={expenses}
-          profile={profile}
-          paycheckConfig={paycheckConfig}
-          onRefresh={loadAll}
-        />
-      )}
-      {view === "overview" && (
-        <Overview payPeriods={payPeriods} categories={categories} expenses={expenses} />
-      )}
-      {view === "investments" && (
-        <InvestmentPanel investments={investments} onRefresh={loadAll} />
-      )}
-      {view === "admin" && (
-        <AdminPanel
-          config={paycheckConfig}
-          payPeriods={payPeriods}
-          categories={categories}
-          expenses={expenses}
-          profile={profile}
-          onRefresh={loadAll}
-        />
-      )}
-    </>
+      {children}
+    </BudgetDataContext.Provider>
   );
 }

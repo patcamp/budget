@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { PayPeriod, Category, Expense } from "@/lib/types";
 import PeriodFilter from "./PeriodFilter";
@@ -9,6 +9,8 @@ interface Props {
   payPeriods: PayPeriod[];
   categories: Category[];
   expenses: Expense[];
+  selectedIds: string[];
+  onSelectedIdsChange: (ids: string[]) => void;
 }
 
 function fmt(n: number) {
@@ -25,13 +27,55 @@ function formatRange(p: PayPeriod) {
   })}`;
 }
 
-export default function Overview({ payPeriods, categories, expenses }: Props) {
+function csvCell(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function downloadTransactionsCsv(
+  expenses: Expense[],
+  categories: Category[],
+  periods: PayPeriod[]
+) {
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const periodById = new Map(periods.map((p) => [p.id, p]));
+
+  const rows = [...expenses].sort((a, b) => a.expense_date.localeCompare(b.expense_date));
+
+  const header = ["Date", "Category", "Description", "Amount", "Pay Period"];
+  const lines = [header.map(csvCell).join(",")];
+
+  for (const e of rows) {
+    const category = categoryById.get(e.category_id);
+    const period = periodById.get(e.pay_period_id);
+    lines.push(
+      [
+        e.expense_date,
+        category ? category.name : "Uncategorized",
+        e.description ?? "",
+        Number(e.amount).toFixed(2),
+        period ? formatRange(period) : "",
+      ]
+        .map(csvCell)
+        .join(",")
+    );
+  }
+
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export default function Overview({ payPeriods, categories, expenses, selectedIds, onSelectedIdsChange }: Props) {
   const sortedPeriods = useMemo(
     () => [...payPeriods].sort((a, b) => a.start_date.localeCompare(b.start_date)),
     [payPeriods]
   );
-
-  const [selectedIds, setSelectedIds] = useState<string[]>(() => sortedPeriods.map((p) => p.id));
 
   const selectedPeriods = useMemo(
     () => sortedPeriods.filter((p) => selectedIds.includes(p.id)),
@@ -46,6 +90,11 @@ export default function Overview({ payPeriods, categories, expenses }: Props) {
       return { period: p, actual, income, surplus: income - actual };
     });
   }, [selectedPeriods, expenses]);
+
+  const selectedExpenses = useMemo(
+    () => expenses.filter((e) => selectedIds.includes(e.pay_period_id)),
+    [expenses, selectedIds]
+  );
 
   const selectedCount = periodStats.length;
   const avgIncome = selectedCount ? periodStats.reduce((sum, p) => sum + p.income, 0) / selectedCount : 0;
@@ -91,7 +140,29 @@ export default function Overview({ payPeriods, categories, expenses }: Props) {
           Averages and trends across the pay periods you select below
         </div>
 
-        <PeriodFilter periods={sortedPeriods} selectedIds={selectedIds} onChange={setSelectedIds} />
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <PeriodFilter periods={sortedPeriods} selectedIds={selectedIds} onChange={onSelectedIdsChange} />
+
+          <button
+            onClick={() => downloadTransactionsCsv(selectedExpenses, categories, sortedPeriods)}
+            disabled={selectedExpenses.length === 0}
+            style={{
+              background: selectedExpenses.length === 0 ? "var(--bg-panel)" : "var(--accent-strong)",
+              border: `1px solid ${selectedExpenses.length === 0 ? "var(--border)" : "var(--accent)"}`,
+              borderRadius: 8,
+              padding: "8px 14px",
+              fontSize: 12,
+              fontWeight: 600,
+              color: selectedExpenses.length === 0 ? "var(--text-faint)" : "var(--accent-text)",
+              cursor: selectedExpenses.length === 0 ? "not-allowed" : "pointer",
+              whiteSpace: "nowrap",
+              marginTop: 4,
+              transition: "background 0.2s, border-color 0.2s",
+            }}
+          >
+            ⬇ Download CSV
+          </button>
+        </div>
       </div>
 
       <div style={{ padding: "20px 24px 0" }}>

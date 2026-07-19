@@ -20,7 +20,7 @@ Requires `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env
 
 ## Architecture
 
-- `app/` — Next.js App Router entry point. `page.tsx` fetches all data on mount via `loadPageData()` and owns the top-level tab navigation (This Period / Overview / Investments / Admin). See [app/CLAUDE.md](app/CLAUDE.md).
+- `app/` — Next.js App Router entry point. `(app)/layout.tsx` fetches all data on mount via `loadPageData()` and owns the top-level tab navigation (This Period / Overview / Investments / Admin) as real routes (`/`, `/overview`, `/investments`, `/admin`). See [app/CLAUDE.md](app/CLAUDE.md).
 - `components/api/` — all Supabase calls, no JSX. Each file owns one domain: `data.ts` (page load), `auth.ts` (sign in/up/out, session, profile), `onboarding.ts` (first-login seed for new accounts), `dashboard.ts` (lock/create period), `expenses.ts`, `investments.ts`, `periods.ts` (admin edit/delete), `categories.ts` (admin CRUD), `admin.ts` (paycheck config).
 - `components/ui/` — all client components (`"use client"`), no direct Supabase imports. See [components/CLAUDE.md](components/CLAUDE.md).
 - `lib/` — Supabase client singleton + TypeScript types mirroring the DB schema. See [lib/CLAUDE.md](lib/CLAUDE.md).
@@ -29,9 +29,11 @@ Requires `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env
 
 ## Auth & data flow
 
-`app/page.tsx` gates everything on a Supabase Auth session (`getSession()` + `onAuthChange`): no session renders `AuthScreen` (login/register), a session renders the tab UI with a sign-out header. The session lives in localStorage via supabase-js, so all data fetching stays client-side — no server components or middleware. RLS scopes every query/mutation to the signed-in user automatically; `user_id` columns default to `auth.uid()` so insert payloads never send it.
+`app/(app)/layout.tsx` gates everything on a Supabase Auth session (`getSession()` + `onAuthChange`): no session renders `AuthScreen` (login/register), a session renders the tab UI with a sign-out header and `{children}` (the matched route page). The session lives in localStorage via supabase-js, so all data fetching stays client-side — no server components or middleware. RLS scopes every query/mutation to the signed-in user automatically; `user_id` columns default to `auth.uid()` so insert payloads never send it.
 
-Once signed in, `page.tsx` calls `loadPageData()`, which fires 6 parallel Supabase queries (`pay_periods`, `categories`, `expenses`, `paycheck_config`, `investments`, `profiles`) and returns them as a single object. If the account has no categories and no paycheck config (fresh registration), `setupNewUser()` seeds starter categories, a paycheck config from the salary captured at signup, and a first pay period, then refetches. All data is held in `useState` in `page.tsx` and passed as props to whichever tab is active. Any mutation anywhere in the tree calls `onRefresh` (wired to `loadAll`) to trigger a full refetch — no optimistic UI, no realtime subscriptions, no local cache patching.
+Once signed in, the layout calls `loadPageData()`, which fires 6 parallel Supabase queries (`pay_periods`, `categories`, `expenses`, `paycheck_config`, `investments`, `profiles`) and returns them as a single object. If the account has no categories and no paycheck config (fresh registration), `setupNewUser()` seeds starter categories, a paycheck config from the salary captured at signup, and a first pay period, then refetches. All data is held in `useState` in the layout and exposed to route pages via a `useBudgetData()` context hook — each of `app/(app)/page.tsx`, `overview/page.tsx`, `investments/page.tsx`, `admin/page.tsx` reads what it needs and renders the corresponding tab component. Any mutation anywhere in the tree calls `onRefresh` (wired to `loadAll`) to trigger a full refetch — no optimistic UI, no realtime subscriptions, no local cache patching.
+
+The This Period and Overview routes additionally sync their filter state to the URL query string (`?period=&category=` and `?periods=`, respectively) via `useSearchParams`/`router.replace`, so filters are shareable/bookmarkable and survive a refresh; both default sensibly (latest period + all categories; all periods selected) when the params are absent.
 
 ## Conventions worth knowing before editing
 

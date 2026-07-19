@@ -17,6 +17,10 @@ interface Props {
   profile: Profile | null;
   paycheckConfig: PaycheckConfig | null;
   onRefresh: () => Promise<void>;
+  selectedPeriodId: string | null;
+  onSelectedPeriodIdChange: (id: string | null) => void;
+  statementFilter: string;
+  onStatementFilterChange: (filter: string) => void;
 }
 
 function fmt(n: number) {
@@ -28,18 +32,25 @@ function fmtExact(n: number) {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function Dashboard({ payPeriods, categories, expenses, profile, paycheckConfig, onRefresh }: Props) {
+export default function Dashboard({
+  payPeriods,
+  categories,
+  expenses,
+  profile,
+  paycheckConfig,
+  onRefresh,
+  selectedPeriodId,
+  onSelectedPeriodIdChange,
+  statementFilter,
+  onStatementFilterChange,
+}: Props) {
   const sortedPeriods = useMemo(
     () => [...payPeriods].sort((a, b) => a.start_date.localeCompare(b.start_date)),
     [payPeriods]
   );
 
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(
-    sortedPeriods.length ? sortedPeriods[sortedPeriods.length - 1].id : null
-  );
   const [busy, setBusy] = useState(false);
   const [statementOpen, setStatementOpen] = useState(true);
-  const [statementFilter, setStatementFilter] = useState("all");
   const [hoursEditing, setHoursEditing] = useState(false);
   const [hoursDraft, setHoursDraft] = useState({ day: "", night: "" });
   const [hoursError, setHoursError] = useState<string | null>(null);
@@ -115,7 +126,7 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
       return;
     }
     await onRefresh();
-    if (data) setSelectedPeriodId(data.id);
+    if (data) onSelectedPeriodIdChange(data.id);
   }
 
   const barData = categories.map((c) => ({
@@ -151,7 +162,7 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
         <PayPeriodPicker
           periods={sortedPeriods}
           selectedId={selectedPeriodId}
-          onSelect={(id) => { setSelectedPeriodId(id); setHoursEditing(false); setHoursError(null); }}
+          onSelect={(id) => { onSelectedPeriodIdChange(id); setHoursEditing(false); setHoursError(null); }}
           onCreateNext={handleCreateNextPeriod}
           busy={busy}
         />
@@ -351,7 +362,7 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
                 {statementOpen && (
                   <select
                     value={statementFilter}
-                    onChange={(e) => setStatementFilter(e.target.value)}
+                    onChange={(e) => onStatementFilterChange(e.target.value)}
                     onClick={(e) => e.stopPropagation()} // prevent click bubbling to the collapse toggle
                     style={{
                       flex: 1,
@@ -385,7 +396,7 @@ export default function Dashboard({ payPeriods, categories, expenses, profile, p
                   onChanged={onRefresh}
                   noCard
                   categoryFilter={statementFilter}
-                  onCategoryFilterChange={setStatementFilter}
+                  onCategoryFilterChange={onStatementFilterChange}
                 />
               )}
             </div>
