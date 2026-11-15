@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Dashboard from "@/components/ui/Dashboard";
 import { useBudgetData } from "./layout";
@@ -24,7 +24,28 @@ export default function ThisPeriodPage() {
         ? sortedPeriods[sortedPeriods.length - 1].id
         : null;
 
-  const statementFilter = searchParams.get("category") ?? "all";
+  const categoryParam = searchParams.get("category");
+  const statementFilter =
+    categoryParam && categoryParam !== "all" && categories.some((c) => c.id === categoryParam)
+      ? categoryParam
+      : "all";
+
+  // Canonicalize stale/invalid query params so bookmarks match what the UI shows.
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    let dirty = false;
+    if (periodParam && selectedPeriodId && periodParam !== selectedPeriodId) {
+      params.set("period", selectedPeriodId);
+      dirty = true;
+    }
+    if (categoryParam && categoryParam !== "all" && statementFilter === "all") {
+      params.delete("category");
+      dirty = true;
+    }
+    if (!dirty) return;
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [periodParam, selectedPeriodId, categoryParam, statementFilter, searchParams, router, pathname]);
 
   function updateParams(next: { period?: string | null; category?: string | null }) {
     const params = new URLSearchParams(searchParams.toString());

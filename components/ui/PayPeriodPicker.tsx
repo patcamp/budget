@@ -10,63 +10,99 @@ interface Props {
   busy: boolean;
 }
 
+function formatRange(p: PayPeriod) {
+  const start = new Date(p.start_date + "T00:00:00");
+  const end = new Date(p.end_date + "T00:00:00");
+  return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })}`;
+}
+
 export default function PayPeriodPicker({ periods, selectedId, onSelect, onCreateNext, busy }: Props) {
-  function formatRange(p: PayPeriod) {
-    const start = new Date(p.start_date + "T00:00:00");
-    const end = new Date(p.end_date + "T00:00:00");
-    return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    })}`;
-  }
+  const selectStyle: React.CSSProperties = {
+    flex: 1,
+    background: "var(--bg-panel)",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    color: "var(--text)",
+    fontSize: 14,
+    fontWeight: 600,
+    padding: "12px 14px",
+    outline: "none",
+    minWidth: 0,
+  };
+
+  const newBtnStyle: React.CSSProperties = {
+    padding: "12px 14px",
+    borderRadius: 8,
+    border: "1px dashed var(--border-strong)",
+    background: "transparent",
+    color: "var(--text-muted)",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: busy ? "wait" : "pointer",
+    opacity: busy ? 0.6 : 1,
+    whiteSpace: "nowrap",
+  };
 
   return (
-    <div style={{ display: "flex", gap: 8, marginTop: 18, flexWrap: "wrap", alignItems: "center" }}>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {periods.map((p) => {
-          const active = p.id === selectedId;
-          return (
-            <button
-              key={p.id}
-              onClick={() => onSelect(p.id)}
-              style={{
-                padding: "7px 14px",
-                borderRadius: 7,
-                border: "1px solid",
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 600,
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                borderColor: active ? "var(--accent)" : "var(--border)",
-                background: active ? "var(--accent-strong)" : "var(--bg-panel)",
-                color: active ? "var(--accent-text)" : "var(--text-muted)",
-              }}
-            >
-              {p.is_locked && <span style={{ fontSize: 10 }}>🔒</span>}
-              {formatRange(p)}
-            </button>
-          );
-        })}
+    <div style={{ marginTop: 18 }}>
+      {/* Desktop: wrapping pills */}
+      <div className="hide-mobile" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {periods.map((p) => {
+            const active = p.id === selectedId;
+            return (
+              <button
+                key={p.id}
+                onClick={() => onSelect(p.id)}
+                style={{
+                  padding: "7px 14px",
+                  borderRadius: 7,
+                  border: "1px solid",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  borderColor: active ? "var(--accent)" : "var(--border)",
+                  background: active ? "var(--accent-strong)" : "var(--bg-panel)",
+                  color: active ? "var(--accent-text)" : "var(--text-muted)",
+                }}
+              >
+                {p.is_locked && <span style={{ fontSize: 10 }}>🔒</span>}
+                {formatRange(p)}
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={onCreateNext} disabled={busy || periods.length === 0} style={{ ...newBtnStyle, padding: "7px 14px", fontSize: 12 }}>
+          + New Pay Period
+        </button>
       </div>
-      <button
-        onClick={onCreateNext}
-        disabled={busy || periods.length === 0}
-        style={{
-          padding: "7px 14px",
-          borderRadius: 7,
-          border: "1px dashed var(--border-strong)",
-          background: "transparent",
-          color: "var(--text-muted)",
-          fontSize: 12,
-          fontWeight: 600,
-          cursor: busy ? "wait" : "pointer",
-          opacity: busy ? 0.6 : 1,
-        }}
-      >
-        + New Pay Period
-      </button>
+
+      {/* Mobile: compact select + new */}
+      <div className="show-mobile-flex" style={{ display: "none", gap: 8, alignItems: "stretch" }}>
+        <select
+          value={selectedId ?? ""}
+          onChange={(e) => onSelect(e.target.value)}
+          style={selectStyle}
+          aria-label="Pay period"
+        >
+          {periods.length === 0 && <option value="">No periods</option>}
+          {periods.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.is_locked ? "🔒 " : ""}
+              {formatRange(p)}
+            </option>
+          ))}
+        </select>
+        <button onClick={onCreateNext} disabled={busy || periods.length === 0} style={newBtnStyle} aria-label="New pay period">
+          + New
+        </button>
+      </div>
     </div>
   );
 }

@@ -144,8 +144,13 @@ function NumField({ label, value, onChange, prefix, suffix, step = 0.01, min = 0
       <div style={{ display: "flex", alignItems: "center", background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 6, overflow: "hidden" }}>
         {prefix && <span style={{ padding: "6px 8px", color: "var(--text-faint)", fontSize: 13, borderRight: "1px solid var(--border)", flexShrink: 0 }}>{prefix}</span>}
         <input
-          type="number" step={step} min={min} value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
+          type="number" step={step} min={min} value={Number.isFinite(value) ? value : 0}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === "") { onChange(0); return; }
+            const n = Number(raw);
+            if (Number.isFinite(n)) onChange(n);
+          }}
           style={{ flex: 1, background: "transparent", border: "none", color: "var(--text)", fontSize: 13, padding: "6px 10px", outline: "none", width: 0 }}
         />
         {suffix && <span style={{ padding: "6px 8px", color: "var(--text-faint)", fontSize: 12, borderLeft: "1px solid var(--border)", flexShrink: 0 }}>{suffix}</span>}
@@ -278,6 +283,17 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
     }
     if (!hasSpending) {
       setPaycheckStatus({ msg: "Add at least one Spending account.", ok: false });
+      return;
+    }
+    if (
+      !Number.isFinite(form.pay_periods_per_year) ||
+      form.pay_periods_per_year < 1 ||
+      !Number.isFinite(form.annual_salary) ||
+      !Number.isFinite(form.hourly_rate) ||
+      !Number.isFinite(amounts.gross) ||
+      !Number.isFinite(amounts.spending)
+    ) {
+      setPaycheckStatus({ msg: "Pay figures must be valid numbers (periods/year ≥ 1).", ok: false });
       return;
     }
     setPaycheckBusy(true);
@@ -675,8 +691,18 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
               <div style={{ borderTop: "1px solid var(--border)", margin: "8px 0" }} />
               <PreviewRow label="Gross check" value={fmtMoney(amounts.preTaxTotal + amounts.taxes + amounts.postTaxTotal + amounts.withAmounts.filter((a) => a.type === "spending" || a.type === "other").reduce((s, a) => s + a.amount, 0))} color="var(--text-faint)" />
             </div>
-            <button onClick={savePaycheck} disabled={paycheckBusy || (!netAllocationValid && netAllocations.length > 0) || !hasSpending}
-              style={{ width: "100%", padding: "12px 20px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 10, color: "var(--accent-text)", fontSize: 13, fontWeight: 700, cursor: paycheckBusy ? "wait" : "pointer", opacity: paycheckBusy || (!netAllocationValid && netAllocations.length > 0) || !hasSpending ? 0.5 : 1 }}>
+            <button
+              onClick={savePaycheck}
+              disabled={
+                paycheckBusy ||
+                (!netAllocationValid && netAllocations.length > 0) ||
+                !hasSpending ||
+                !Number.isFinite(form.pay_periods_per_year) ||
+                form.pay_periods_per_year < 1 ||
+                !Number.isFinite(amounts.gross)
+              }
+              style={{ width: "100%", padding: "12px 20px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 10, color: "var(--accent-text)", fontSize: 13, fontWeight: 700, cursor: paycheckBusy ? "wait" : "pointer", opacity: paycheckBusy || (!netAllocationValid && netAllocations.length > 0) || !hasSpending || form.pay_periods_per_year < 1 || !Number.isFinite(amounts.gross) ? 0.5 : 1 }}
+            >
               {paycheckBusy ? "Saving…" : "Save & Apply to Open Periods"}
             </button>
             {paycheckStatus && (

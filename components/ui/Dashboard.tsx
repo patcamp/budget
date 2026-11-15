@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { togglePeriodLock, createPayPeriod, updatePeriodHours } from "@/components/api/dashboard";
-import { nightRate } from "@/lib/paycheck";
 import { PayPeriod, Category, Expense, Profile, PaycheckConfig } from "@/lib/types";
 import AddExpenseForm from "./AddExpenseForm";
 import CategoryTile from "./CategoryTile";
@@ -54,11 +53,10 @@ export default function Dashboard({
   const [hoursEditing, setHoursEditing] = useState(false);
   const [hoursDraft, setHoursDraft] = useState({ day: "", night: "" });
   const [hoursError, setHoursError] = useState<string | null>(null);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   const activePeriod = sortedPeriods.find((p) => p.id === selectedPeriodId) || null;
   const isHourly = paycheckConfig?.pay_type === "hourly";
-  // Periods created before the hourly migration have null hours — fall back
-  // to the config's default schedule for display.
   const dayHours = activePeriod?.day_hours ?? Number(paycheckConfig?.default_day_hours ?? 0);
   const nightHours = activePeriod?.night_hours ?? Number(paycheckConfig?.default_night_hours ?? 0);
 
@@ -137,25 +135,29 @@ export default function Dashboard({
     color: c.color,
   }));
 
+  const periodLabel = activePeriod
+    ? `${new Date(activePeriod.start_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(activePeriod.end_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+    : "";
+
   return (
-    <div style={{ minHeight: "100vh", paddingBottom: 60 }}>
+    <div style={{ minHeight: "100%", paddingBottom: 80 }}>
       {/* HEADER */}
       <div
         style={{
           background: "linear-gradient(160deg,var(--bg-panel) 0%,var(--bg-page) 100%)",
           borderBottom: "1px solid var(--border)",
-          padding: "28px 24px 20px",
+          padding: "20px 20px 16px",
         }}
       >
         {profile?.company && (
-          <div style={{ fontSize: 10, letterSpacing: "0.18em", color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 6 }}>
+          <div className="hide-mobile" style={{ fontSize: 10, letterSpacing: "0.18em", color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 6 }}>
             {profile.company}
           </div>
         )}
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.5px" }}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.5px" }}>
           {profile?.full_name ? `${profile.full_name.split(" ")[0]}'s Budget` : "My Budget"}
         </h1>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+        <div className="hide-mobile" style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
           Live pay-period tracker
         </div>
 
@@ -168,97 +170,95 @@ export default function Dashboard({
         />
       </div>
 
-      <div style={{ padding: "20px 24px 0" }}>
+      <div style={{ padding: "16px 16px 0" }}>
         {!activePeriod && (
           <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--text-muted)" }}>
-            No pay periods yet. Run the seed SQL or create one to get started.
+            No pay periods yet. Create one to get started.
           </div>
         )}
 
         {activePeriod && (
           <>
-            {/* LOCK STATUS BAR */}
+            {/* SURPLUS HERO — primary mobile answer: can I spend? */}
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                background: isLocked ? "var(--success-bg)" : "var(--bg-panel)",
-                border: `1px solid ${isLocked ? "var(--success-border)" : "var(--border)"}`,
-                borderRadius: 10,
-                padding: "12px 18px",
-                marginBottom: 18,
-                flexWrap: "wrap",
-                gap: 10,
+                background: surplus >= 0 ? "var(--success-bg)" : "var(--danger-bg)",
+                border: `1px solid ${surplus >= 0 ? "var(--success-border)" : "var(--danger-border)"}`,
+                borderRadius: 14,
+                padding: "18px 20px",
+                marginBottom: 14,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
+                    {surplus >= 0 ? "Left to spend" : "Over budget"}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 36,
+                      fontWeight: 800,
+                      letterSpacing: "-1px",
+                      color: surplus >= 0 ? "var(--success-text)" : "var(--danger-text)",
+                      lineHeight: 1.1,
+                    }}
+                  >
+                    {surplus >= 0 ? "" : "−"}
+                    {fmt(Math.abs(surplus))}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
+                    {periodLabel}
+                    {" · "}
+                    <span style={{ color: isLocked ? "var(--success-text)" : "var(--warning-text)", fontWeight: 600 }}>
+                      {isLocked ? "Locked" : "Open"}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={toggleLock}
+                  disabled={busy}
+                  className="tap-target"
                   style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: isLocked ? "var(--success-text)" : "var(--warning-text)",
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    border: "1px solid",
+                    borderColor: isLocked ? "var(--border-strong)" : "var(--accent)",
+                    background: isLocked ? "var(--border)" : "var(--accent-strong)",
+                    color: isLocked ? "var(--text-secondary)" : "var(--accent-text)",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: busy ? "wait" : "pointer",
+                    opacity: busy ? 0.6 : 1,
+                    minHeight: 44,
                   }}
-                />
-                <div style={{ fontSize: 13, fontWeight: 600, color: isLocked ? "var(--success-text)" : "var(--warning-text)" }}>
-                  {isLocked ? "Locked — Final" : "Open — Tracking in progress"}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                  {new Date(activePeriod.start_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  {" – "}
-                  {new Date(activePeriod.end_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                </div>
+                >
+                  {isLocked ? "Unlock" : "Lock period"}
+                </button>
               </div>
-              <button
-                onClick={toggleLock}
-                disabled={busy}
-                style={{
-                  padding: "7px 16px",
-                  borderRadius: 7,
-                  border: "1px solid",
-                  borderColor: isLocked ? "var(--border-strong)" : "var(--accent)",
-                  background: isLocked ? "var(--border)" : "var(--accent-strong)",
-                  color: isLocked ? "var(--text-secondary)" : "var(--accent-text)",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: busy ? "wait" : "pointer",
-                  opacity: busy ? 0.6 : 1,
-                }}
-              >
-                {isLocked ? "Unlock to Edit" : "Lock This Period"}
-              </button>
             </div>
 
             {isLocked && (
-              <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 16, padding: "0 4px" }}>
+              <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 14, padding: "0 4px" }}>
                 This period is locked. Expenses are read-only. Unlock if you need to correct something.
               </div>
             )}
 
             {/* HOURS (hourly pay only) */}
             {isHourly && paycheckConfig && (
-              <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 18px", marginBottom: 18 }}>
+              <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 16px", marginBottom: 14 }}>
                 {!hoursEditing ? (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                         Hours This Period
                       </span>
-                      <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
-                        {dayHours} day
-                      </span>
-                      <span style={{ fontSize: 13, color: "var(--purple-text)", fontWeight: 600 }}>
-                        {nightHours} night
-                      </span>
-                      <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
-                        night rate ${nightRate(Number(paycheckConfig.hourly_rate), paycheckConfig.night_diff_type, Number(paycheckConfig.night_diff_value)).toFixed(2)}/hr
-                      </span>
+                      <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>{dayHours} day</span>
+                      <span style={{ fontSize: 13, color: "var(--purple-text)", fontWeight: 600 }}>{nightHours} night</span>
                     </div>
                     {!isLocked && (
                       <button
                         onClick={startEditHours}
-                        style={{ padding: "5px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+                        style={{ padding: "8px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, fontWeight: 600, cursor: "pointer", minHeight: 40 }}
                       >
                         Edit Hours
                       </button>
@@ -274,19 +274,19 @@ export default function Dashboard({
                         <input
                           type="number" step="0.25" min="0" value={hoursDraft[kind]}
                           onChange={(e) => setHoursDraft((d) => ({ ...d, [kind]: e.target.value }))}
-                          style={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text)", fontSize: 13, padding: "6px 10px", outline: "none", width: 90 }}
+                          style={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text)", fontSize: 13, padding: "8px 10px", outline: "none", width: 90 }}
                         />
                       </div>
                     ))}
                     <button
                       onClick={saveHours} disabled={busy}
-                      style={{ padding: "7px 16px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 6, color: "var(--accent-text)", fontSize: 12, fontWeight: 600, cursor: busy ? "wait" : "pointer" }}
+                      style={{ padding: "8px 16px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 6, color: "var(--accent-text)", fontSize: 12, fontWeight: 600, cursor: busy ? "wait" : "pointer", minHeight: 40 }}
                     >
                       {busy ? "Saving…" : "Save"}
                     </button>
                     <button
                       onClick={() => { setHoursEditing(false); setHoursError(null); }}
-                      style={{ padding: "7px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}
+                      style={{ padding: "8px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer", minHeight: 40 }}
                     >
                       Cancel
                     </button>
@@ -296,30 +296,23 @@ export default function Dashboard({
               </div>
             )}
 
-            {/* SUMMARY CARDS */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
+            {/* SECONDARY SUMMARY CARDS */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 16 }}>
               {[
-                { label: "Paycheck", val: fmt(income), color: "var(--text)", border: "var(--border)" },
-                { label: "Budget Total", val: fmt(totalBudget), color: "var(--purple-text)", border: "var(--border)" },
+                { label: "Paycheck", val: fmt(income), color: "var(--text)" },
+                { label: "Budget", val: fmt(totalBudget), color: "var(--purple-text)" },
                 {
-                  label: "Actual Spend",
+                  label: "Spent",
                   val: fmt(totalActual),
                   sub: fmtExact(totalActual),
                   color: totalActual > income ? "var(--danger-text)" : "var(--text)",
-                  border: "var(--border)",
-                },
-                {
-                  label: "Surplus / Buffer",
-                  val: `${surplus >= 0 ? "+" : ""}${fmt(surplus)}`,
-                  color: surplus >= 0 ? "var(--success-text)" : "var(--danger-text)",
-                  border: surplus >= 0 ? "#14532D" : "#7F1D1D",
                 },
               ].map((c) => (
-                <div key={c.label} style={{ background: "var(--bg-panel)", border: `1px solid ${c.border}`, borderRadius: 10, padding: "14px 18px" }}>
+                <div key={c.label} style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px" }}>
                   <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
                     {c.label}
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.val}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.val}</div>
                   {c.sub && (
                     <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>{c.sub}</div>
                   )}
@@ -327,17 +320,19 @@ export default function Dashboard({
               ))}
             </div>
 
-            {/* ADD EXPENSE FORM */}
+            {/* ADD EXPENSE — desktop inline */}
             {!isLocked && (
-              <AddExpenseForm
-                payPeriodId={activePeriod.id}
-                categories={categories}
-                onAdded={onRefresh}
-              />
+              <div className="hide-mobile" style={{ marginBottom: 4 }}>
+                <AddExpenseForm
+                  payPeriodId={activePeriod.id}
+                  categories={categories}
+                  onAdded={onRefresh}
+                />
+              </div>
             )}
 
             {/* STATEMENT */}
-            <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", marginTop: 20, marginBottom: 20 }}>
+            <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", marginTop: 16, marginBottom: 16 }}>
               <div
                 onClick={() => setStatementOpen((o) => !o)}
                 style={{
@@ -346,9 +341,10 @@ export default function Dashboard({
                   justifyContent: "space-between",
                   background: "var(--bg-page)",
                   borderBottom: statementOpen ? "1px solid var(--border)" : "none",
-                  padding: "12px 18px",
+                  padding: "12px 16px",
                   cursor: "pointer",
                   gap: 12,
+                  minHeight: 48,
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
@@ -356,14 +352,14 @@ export default function Dashboard({
                     Statement
                   </span>
                   <span style={{ fontSize: 12, color: "var(--text-faint)", fontWeight: 500 }}>
-                    {periodExpenses.length} transaction{periodExpenses.length !== 1 ? "s" : ""}
+                    {periodExpenses.length}
                   </span>
                 </div>
                 {statementOpen && (
                   <select
                     value={statementFilter}
                     onChange={(e) => onStatementFilterChange(e.target.value)}
-                    onClick={(e) => e.stopPropagation()} // prevent click bubbling to the collapse toggle
+                    onClick={(e) => e.stopPropagation()}
                     style={{
                       flex: 1,
                       maxWidth: 200,
@@ -373,7 +369,7 @@ export default function Dashboard({
                       borderRadius: 6,
                       color: "var(--text-muted)",
                       fontSize: 12,
-                      padding: "5px 8px",
+                      padding: "8px 8px",
                       outline: "none",
                       cursor: "default",
                     }}
@@ -401,35 +397,59 @@ export default function Dashboard({
               )}
             </div>
 
-            {/* BAR CHART */}
-            <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 12px 12px", marginBottom: 20, marginTop: 20 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 14, paddingLeft: 6 }}>
-                Actual vs. Budget — This Period
+            {/* BAR CHART — horizontal on mobile via CSS class swap of two charts is heavy;
+                use one layout: category on X for desktop, accept horizontal scroll-less by
+                using shorter names; on mobile use layout="vertical" via a second chart. */}
+            <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 10px 10px", marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 12, paddingLeft: 6 }}>
+                Actual vs. Budget
               </div>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={barData} margin={{ top: 0, right: 4, left: -24, bottom: 56 }}>
-                  <XAxis dataKey="name" tick={{ fill: "var(--text-faint)", fontSize: 9 }} angle={-40} textAnchor="end" interval={0} />
-                  <YAxis tick={{ fill: "var(--text-faint)", fontSize: 9 }} />
-                  <Tooltip
-                    contentStyle={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-                    labelStyle={{ color: "var(--text)", fontWeight: 700, marginBottom: 4 }}
-                    formatter={(val: number, name: string) => [fmt(val), name === "actual" ? "Actual" : "Budget"]}
-                  />
-                  <Bar dataKey="budget" name="budget" fill="var(--border)" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="actual" name="actual" radius={[3, 3, 0, 0]}>
-                    {barData.map((entry) => (
-                      <Cell key={entry.fullName} fill={entry.actual > entry.budget ? "#EF4444" : entry.color} opacity={0.85} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {/* Desktop vertical bars */}
+              <div className="hide-mobile">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={barData} margin={{ top: 0, right: 4, left: -24, bottom: 56 }}>
+                    <XAxis dataKey="name" tick={{ fill: "var(--text-faint)", fontSize: 9 }} angle={-40} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fill: "var(--text-faint)", fontSize: 9 }} />
+                    <Tooltip
+                      contentStyle={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                      labelStyle={{ color: "var(--text)", fontWeight: 700, marginBottom: 4 }}
+                      formatter={(val: number, name: string) => [fmt(val), name === "actual" ? "Actual" : "Budget"]}
+                    />
+                    <Bar dataKey="budget" name="budget" fill="var(--border)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="actual" name="actual" radius={[3, 3, 0, 0]}>
+                      {barData.map((entry) => (
+                        <Cell key={entry.fullName} fill={entry.actual > entry.budget ? "#EF4444" : entry.color} opacity={0.85} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Mobile horizontal bars */}
+              <div className="show-mobile">
+                <ResponsiveContainer width="100%" height={Math.max(180, barData.length * 36)}>
+                  <BarChart data={barData} layout="vertical" margin={{ top: 0, right: 12, left: 4, bottom: 0 }}>
+                    <XAxis type="number" tick={{ fill: "var(--text-faint)", fontSize: 10 }} />
+                    <YAxis type="category" dataKey="name" width={88} tick={{ fill: "var(--text-muted)", fontSize: 11 }} />
+                    <Tooltip
+                      contentStyle={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                      formatter={(val: number, name: string) => [fmt(val), name === "actual" ? "Actual" : "Budget"]}
+                    />
+                    <Bar dataKey="budget" name="budget" fill="var(--border)" radius={[0, 3, 3, 0]} barSize={8} />
+                    <Bar dataKey="actual" name="actual" radius={[0, 3, 3, 0]} barSize={8}>
+                      {barData.map((entry) => (
+                        <Cell key={entry.fullName} fill={entry.actual > entry.budget ? "#EF4444" : entry.color} opacity={0.85} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
-            {/* CATEGORY TILES */}
+            {/* CATEGORY TILES — progress cards; tap filters statement via onClick optional later */}
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>
               Categories
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 270px), 1fr))", gap: 10, marginBottom: 24 }}>
               {categories.map((c) => (
                 <CategoryTile
                   key={c.id}
@@ -445,6 +465,79 @@ export default function Dashboard({
           </>
         )}
       </div>
+
+      {/* Mobile FAB + bottom sheet for add expense */}
+      {!isLocked && activePeriod && (
+        <>
+          <button
+            type="button"
+            className="show-mobile"
+            onClick={() => setAddSheetOpen(true)}
+            aria-label="Add expense"
+            style={{
+              position: "fixed",
+              right: 16,
+              bottom: "calc(72px + env(safe-area-inset-bottom, 0px))",
+              zIndex: 45,
+              width: 56,
+              height: 56,
+              borderRadius: "50%",
+              border: "1px solid var(--accent)",
+              background: "var(--accent-strong)",
+              color: "var(--accent-text)",
+              fontSize: 28,
+              fontWeight: 500,
+              lineHeight: 1,
+              cursor: "pointer",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+            }}
+          >
+            +
+          </button>
+
+          {addSheetOpen && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="show-mobile-flex"
+              onClick={() => setAddSheetOpen(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.55)",
+                zIndex: 60,
+                alignItems: "flex-end",
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "100%",
+                  maxHeight: "85vh",
+                  overflow: "auto",
+                  background: "var(--bg-panel)",
+                  borderTopLeftRadius: 16,
+                  borderTopRightRadius: 16,
+                  padding: "18px 16px calc(18px + env(safe-area-inset-bottom, 0px))",
+                  borderTop: "1px solid var(--border)",
+                }}
+              >
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 14 }}>
+                  Add expense
+                </div>
+                <AddExpenseForm
+                  payPeriodId={activePeriod.id}
+                  categories={categories}
+                  onAdded={onRefresh}
+                  layout="stacked"
+                  autoFocusAmount
+                  onClose={() => setAddSheetOpen(false)}
+                />
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

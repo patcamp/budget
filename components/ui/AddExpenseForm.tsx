@@ -1,22 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addExpense } from "@/components/api/expenses";
 import { Category } from "@/lib/types";
+import { toLocalDateString } from "@/lib/dates";
 
 interface Props {
   payPeriodId: string;
   categories: Category[];
   onAdded: () => Promise<void>;
+  /** stacked = amount-first column layout (mobile sheet). inline = desktop row. */
+  layout?: "inline" | "stacked";
+  onClose?: () => void;
+  autoFocusAmount?: boolean;
 }
 
-export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Props) {
+export default function AddExpenseForm({
+  payPeriodId,
+  categories,
+  onAdded,
+  layout = "inline",
+  onClose,
+  autoFocusAmount = false,
+}: Props) {
   const [categoryId, setCategoryId] = useState(categories[0]?.id || "");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => toLocalDateString());
   const [submitting, setSubmitting] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (autoFocusAmount) amountRef.current?.focus();
+  }, [autoFocusAmount]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,6 +42,7 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
     if (!categoryId || isNaN(numAmount) || numAmount === 0) return;
 
     setSubmitting(true);
+    setError(null);
     const err = await addExpense({
       pay_period_id: payPeriodId,
       category_id: categoryId,
@@ -34,7 +53,7 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
     setSubmitting(false);
 
     if (err) {
-      alert(`Failed to add expense: ${err}`);
+      setError(err);
       return;
     }
 
@@ -43,6 +62,7 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1500);
     await onAdded();
+    onClose?.();
   }
 
   const inputStyle: React.CSSProperties = {
@@ -53,24 +73,56 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
     padding: "9px 12px",
     fontSize: 13,
     outline: "none",
+    width: layout === "stacked" ? "100%" : undefined,
+    boxSizing: "border-box",
   };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 10,
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  };
+
+  const stacked = layout === "stacked";
 
   return (
     <form
       onSubmit={handleSubmit}
-      style={{
-        background: "var(--bg-panel)",
-        border: "1px solid var(--border)",
-        borderRadius: 12,
-        padding: "16px 18px",
-        display: "flex",
-        gap: 10,
-        flexWrap: "wrap",
-        alignItems: "flex-end",
-      }}
+      style={
+        stacked
+          ? { display: "flex", flexDirection: "column", gap: 14 }
+          : {
+              background: "var(--bg-panel)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: "16px 18px",
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              alignItems: "flex-end",
+            }
+      }
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 160 }}>
-        <label style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Category</label>
+      {stacked && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={labelStyle}>Amount</label>
+          <input
+            ref={amountRef}
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={{ ...inputStyle, fontSize: 28, fontWeight: 700, padding: "14px 16px" }}
+            required
+          />
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: stacked ? undefined : 160, width: stacked ? "100%" : undefined }}>
+        <label style={labelStyle}>Category</label>
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={inputStyle} required>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
@@ -80,21 +132,23 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
         </select>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 110 }}>
-        <label style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Amount</label>
-        <input
-          type="number"
-          step="0.01"
-          placeholder="0.00"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          style={inputStyle}
-          required
-        />
-      </div>
+      {!stacked && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 110 }}>
+          <label style={labelStyle}>Amount</label>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={inputStyle}
+            required
+          />
+        </div>
+      )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 180px" }}>
-        <label style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Description (optional)</label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: stacked ? undefined : "1 1 180px", width: stacked ? "100%" : undefined }}>
+        <label style={labelStyle}>Description (optional)</label>
         <input
           type="text"
           placeholder="e.g. dinner out"
@@ -104,29 +158,59 @@ export default function AddExpenseForm({ payPeriodId, categories, onAdded }: Pro
         />
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 145 }}>
-        <label style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Date</label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, width: stacked ? "100%" : 145 }}>
+        <label style={labelStyle}>Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} required />
       </div>
 
-      <button
-        type="submit"
-        disabled={submitting}
-        style={{
-          padding: "9px 20px",
-          borderRadius: 7,
-          border: "1px solid var(--accent-strong)",
-          background: justAdded ? "#15803D" : "var(--accent-strong)",
-          color: "#fff",
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: submitting ? "wait" : "pointer",
-          opacity: submitting ? 0.6 : 1,
-          transition: "background 0.2s",
-        }}
-      >
-        {justAdded ? "Added ✓" : submitting ? "Adding…" : "Add Expense"}
-      </button>
+      {error && (
+        <div style={{ width: "100%", padding: "9px 12px", borderRadius: 8, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: 12, color: "var(--danger-text)" }}>
+          {error}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, width: stacked ? "100%" : undefined, marginTop: stacked ? 4 : 0 }}>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              flex: stacked ? 1 : undefined,
+              padding: "12px 18px",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "transparent",
+              color: "var(--text-muted)",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+              minHeight: 48,
+            }}
+          >
+            Cancel
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={submitting}
+          style={{
+            flex: stacked ? 2 : undefined,
+            padding: stacked ? "12px 20px" : "9px 20px",
+            borderRadius: 8,
+            border: "1px solid var(--accent-strong)",
+            background: justAdded ? "#15803D" : "var(--accent-strong)",
+            color: "var(--accent-text)",
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: submitting ? "wait" : "pointer",
+            opacity: submitting ? 0.6 : 1,
+            transition: "background 0.2s",
+            minHeight: stacked ? 48 : undefined,
+          }}
+        >
+          {justAdded ? "Added ✓" : submitting ? "Adding…" : "Add Expense"}
+        </button>
+      </div>
     </form>
   );
 }

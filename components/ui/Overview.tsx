@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { PayPeriod, Category, Expense } from "@/lib/types";
+import { toLocalDateString } from "@/lib/dates";
 import PeriodFilter from "./PeriodFilter";
 
 interface Props {
@@ -64,7 +65,7 @@ function downloadTransactionsCsv(
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = `transactions-${toLocalDateString()}.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -129,7 +130,7 @@ export default function Overview({ payPeriods, categories, expenses, selectedIds
         style={{
           background: "linear-gradient(160deg,var(--bg-panel) 0%,var(--bg-page) 100%)",
           borderBottom: "1px solid var(--border)",
-          padding: "28px 24px 20px",
+          padding: "20px 16px 16px",
         }}
       >
         <div style={{ fontSize: 10, letterSpacing: "0.18em", color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 6 }}>
@@ -165,7 +166,7 @@ export default function Overview({ payPeriods, categories, expenses, selectedIds
         </div>
       </div>
 
-      <div style={{ padding: "20px 24px 0" }}>
+      <div style={{ padding: "16px 16px 80px" }}>
         {sortedPeriods.length === 0 && (
           <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--text-muted)" }}>
             No pay periods yet. Run the seed SQL or create one to get started.
@@ -236,15 +237,22 @@ export default function Overview({ payPeriods, categories, expenses, selectedIds
                   key={category.id}
                   style={{
                     display: "flex",
-                    alignItems: "center",
-                    gap: 12,
+                    flexDirection: "column",
+                    gap: 8,
                     padding: "12px 0",
                     borderTop: i === 0 ? "none" : "1px solid var(--border)",
                   }}
                 >
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: category.color, flexShrink: 0 }} />
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", width: 160, flexShrink: 0 }}>{category.name}</div>
-                  <div style={{ flex: 1, height: 4, background: "var(--border)", borderRadius: 2 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: category.color, flexShrink: 0 }} />
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{category.name}</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: pct > 0 ? "var(--danger-text)" : "var(--text-faint)", flexShrink: 0 }}>
+                      {overCount}/{selectedCount} ({pct}%)
+                    </div>
+                  </div>
+                  <div style={{ height: 4, background: "var(--border)", borderRadius: 2, width: "100%" }}>
                     <div
                       style={{
                         height: "100%",
@@ -254,9 +262,6 @@ export default function Overview({ payPeriods, categories, expenses, selectedIds
                         transition: "width 0.3s",
                       }}
                     />
-                  </div>
-                  <div style={{ fontSize: 11, color: pct > 0 ? "var(--danger-text)" : "var(--text-faint)", width: 110, textAlign: "right", flexShrink: 0 }}>
-                    {overCount} / {selectedCount} over ({pct}%)
                   </div>
                 </div>
               ))}

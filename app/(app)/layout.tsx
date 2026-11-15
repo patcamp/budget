@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { loadPageData, PageData } from "@/components/api/data";
@@ -22,11 +22,16 @@ export function useBudgetData(): BudgetData {
 }
 
 const TABS = [
-  { href: "/", label: "This Period" },
-  { href: "/overview", label: "Overview" },
-  { href: "/investments", label: "Investments" },
-  { href: "/admin", label: "Admin" },
+  { href: "/", label: "This Period", short: "Period", icon: "◉" },
+  { href: "/overview", label: "Overview", short: "Overview", icon: "▤" },
+  { href: "/investments", label: "Investments", short: "Invest", icon: "↗" },
+  { href: "/admin", label: "Admin", short: "Admin", icon: "⚙" },
 ];
+
+function tabActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -42,6 +47,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<PageData["profile"]>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Bumps on every auth change / load kickoff so a slower in-flight fetch
+  // for a previous user can't overwrite state after a sign-out or switch.
+  const loadGen = useRef(0);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   useEffect(() => {
     getSession().then((s) => {
@@ -52,15 +62,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadAll = useCallback(async () => {
-    if (!session) return;
+    const active = sessionRef.current;
+    if (!active) return;
+    const gen = ++loadGen.current;
+    const userId = active.user.id;
     setError(null);
     let pageData = await loadPageData();
-    // First-login onboarding: a fresh account has no categories and no
-    // paycheck config — seed starter data (salary comes from the metadata
-    // captured at registration), then refetch. Running this here instead
-    // of at signup makes it work whether or not email confirmation is on.
-    if (!pageData.error && pageData.categories.length === 0 && !pageData.paycheckConfig) {
-      const meta = session.user.user_metadata ?? {};
+    if (gen !== loadGen.current || sessionRef.current?.user.id !== userId) return;
+
+    // Incomplete onboarding: missing config, categories, or first period.
+    // setupNewUser is idempotent and fills only what's missing.
+    if (
+      !pageData.error &&
+      (!pageData.paycheckConfig || pageData.categories.length === 0 || pageData.payPeriods.length === 0)
+    ) {
+      const meta = active.user.user_metadata ?? {};
       const num = (v: unknown) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : null);
       const setupError = await setupNewUser({
         pay_type: meta.pay_type === "hourly" ? "hourly" : "salary",
@@ -70,12 +86,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         default_day_hours: num(meta.default_day_hours),
         default_night_hours: num(meta.default_night_hours),
       });
+      if (gen !== loadGen.current || sessionRef.current?.user.id !== userId) return;
       if (setupError) {
         setError(setupError);
         setLoading(false);
         return;
       }
       pageData = await loadPageData();
+      if (gen !== loadGen.current || sessionRef.current?.user.id !== userId) return;
     }
     if (pageData.error) {
       setError(pageData.error);
@@ -89,9 +107,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setInvestments(pageData.investments);
     setProfile(pageData.profile);
     setLoading(false);
-  }, [session]);
+  }, []);
 
   useEffect(() => {
+    // Invalidate any in-flight load from the previous session immediately.
+    loadGen.current += 1;
     if (session) {
       setLoading(true);
       loadAll();
@@ -103,6 +123,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setPaycheckConfig(null);
       setInvestments([]);
       setProfile(null);
+      setError(null);
+      setLoading(false);
     }
   }, [session, loadAll]);
 
@@ -162,40 +184,63 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <BudgetDataContext.Provider
       value={{ payPeriods, categories, expenses, paycheckConfig, investments, profile, error: null, onRefresh: loadAll }}
     >
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", background: "var(--bg-page)", borderBottom: "1px solid var(--border)" }}>
-        {TABS.map((tab) => (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className="header-tab"
-            style={{
-              display: "inline-block",
-              border: "none",
-              borderBottom: `2px solid ${pathname === tab.href ? "var(--accent)" : "transparent"}`,
-              background: "transparent",
-              color: pathname === tab.href ? "var(--text)" : "var(--text-muted)",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              textDecoration: "none",
-            }}
-          >
-            {tab.label}
-          </Link>
-        ))}
-        <div className="header-user" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
-            {displayName}
-          </span>
-          <button
-            onClick={() => signOut()}
-            style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}
-          >
-            Sign out
-          </button>
+      <div className="app-shell">
+        <div
+          className="desktop-nav"
+          style={{ display: "flex", flexWrap: "wrap", alignItems: "center", background: "var(--bg-page)", borderBottom: "1px solid var(--border)" }}
+        >
+          {TABS.map((tab) => {
+            const active = tabActive(pathname, tab.href);
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className="header-tab"
+                style={{
+                  display: "inline-block",
+                  border: "none",
+                  borderBottom: `2px solid ${active ? "var(--accent)" : "transparent"}`,
+                  background: "transparent",
+                  color: active ? "var(--text)" : "var(--text-muted)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textDecoration: "none",
+                }}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
+          <div className="header-user" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
+              {displayName}
+            </span>
+            <button
+              onClick={() => signOut()}
+              style={{ padding: "8px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0, minHeight: 36 }}
+            >
+              Sign out
+            </button>
+          </div>
         </div>
+
+        {children}
+
+        <nav className="bottom-nav" aria-label="Main">
+          {TABS.map((tab) => {
+            const active = tabActive(pathname, tab.href);
+            return (
+              <Link key={tab.href} href={tab.href} data-active={active ? "true" : "false"}>
+                <span className="nav-icon" aria-hidden>
+                  {tab.icon}
+                </span>
+                {tab.short}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
-      {children}
     </BudgetDataContext.Provider>
   );
 }

@@ -339,9 +339,8 @@ body {
   max-width: 100%;
 }
 
-/* Top header: tabs + account controls in one row on desktop; on mobile
-   the tabs share the first line and the name/sign-out wraps to its own
-   full-width line so it can't get pushed off-screen. */
+/* Top header: tabs + account on desktop. On mobile, tabs move to a fixed
+   bottom bar (thumb zone); the top row keeps only name / sign-out. */
 .header-tab {
   padding: 12px 20px;
 }
@@ -350,17 +349,101 @@ body {
   padding: 0 16px;
 }
 
+.bottom-nav {
+  display: none;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
 @media (max-width: 720px) {
-  .header-tab {
-    flex: 1;
-    padding: 12px 8px;
+  .app-shell {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 
-  .header-user {
+  .desktop-nav .header-tab {
+    display: none;
+  }
+
+  .desktop-nav .header-user {
     flex-basis: 100%;
     justify-content: space-between;
-    border-top: 1px solid var(--border-soft);
-    padding: 9px 16px;
+    margin-left: 0;
+    padding: 10px 16px;
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    min-height: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .bottom-nav a {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    min-height: 56px;
+    padding: 6px 4px;
+  }
+
+  .bottom-nav a[data-active="true"] {
+    color: var(--accent);
+  }
+
+  .bottom-nav a .nav-icon {
+    font-size: 16px;
+    line-height: 1;
+  }
+}
+
+/* Responsive alternate UIs (period select, FAB, investment cards, …) */
+.show-mobile {
+  display: none !important;
+}
+
+.show-mobile-flex {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  .hide-mobile {
+    display: none !important;
+  }
+
+  .show-mobile {
+    display: block !important;
+  }
+
+  .show-mobile-flex {
+    display: flex !important;
+  }
+
+  /* Prevent iOS Safari zoom-on-focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .tap-target {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 
@@ -499,6 +582,18 @@ input,
 textarea,
 select {
   font-family: inherit;
+}
+
+/* Investments add form: 5-col desktop → stacked on mobile */
+@media (max-width: 720px) {
+  .invest-add-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .invest-add-grid > :nth-child(2),
+  .invest-add-grid > :nth-child(5) {
+    grid-column: 1 / -1;
+  }
 }
 
 ::selection {

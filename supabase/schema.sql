@@ -395,3 +395,57 @@ drop view if exists category_spend;
 -- app-level enum/check constraint — validated client-side against
 -- lib/themes.ts before it's ever written.
 alter table profiles add column if not exists theme text not null default 'dark';
+
+-- ============================================================
+-- OWNERSHIP + UNIQUES HARDENING (2026-11-15)
+-- Run all statements in this section together in the SQL Editor.
+--   A. Expenses must reference the caller's own period + category
+--      (RLS alone only checked expenses.user_id, so a known foreign
+--      UUID could still be attached — and the lock trigger's
+--      pay_periods lookup returned null under RLS, treating foreign
+--      periods as unlocked).
+--   B. Prevent duplicate pay periods / investment lots per user.
+-- ============================================================
+
+-- ── A. SAME-OWNER FK CHECKS ON EXPENSES ─────────────────────
+-- SECURITY DEFINER so the period/category lookup can see rows the
+-- invoker couldn't (needed to distinguish "not yours" from "missing"
+-- under RLS). search_path pinned; function only compares auth.uid().
+create or replace function public.enforce_expense_ownership() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  period_owner uuid;
+  category_owner uuid;
+begin
+  select user_id into period_owner from pay_periods where id = new.pay_period_id;
+  if period_owner is null then
+    raise exception 'Pay period not found';
+  end if;
+  if period_owner is distinct from auth.uid() then
+    raise exception 'Pay period does not belong to the current user';
+  end if;
+
+  select user_id into category_owner from categories where id = new.category_id;
+  if category_owner is null then
+    raise exception 'Category not found';
+  end if;
+  if category_owner is distinct from auth.uid() then
+    raise exception 'Category does not belong to the current user';
+  end if;
+
+  return new;
+end $$;
+
+drop trigger if exists enforce_expense_ownership on expenses;
+create trigger enforce_expense_ownership
+  before insert or update of pay_period_id, category_id on expenses
+  for each row execute function public.enforce_expense_ownership();
+
+-- ── B. UNIQUES ──────────────────────────────────────────────
+-- One period per user per start date (blocks double-click / raced creates).
+create unique index if not exists pay_periods_user_start_date_key
+  on pay_periods (user_id, start_date);
+
+-- One lot per ticker+account per user (UI already merges; DB enforces).
+create unique index if not exists investments_user_ticker_account_key
+  on investments (user_id, upper(ticker), account);

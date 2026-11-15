@@ -11,13 +11,14 @@ Split into two subdirectories:
 |------|-------------|
 | `data.ts` | `loadPageData()` — the single page-level fetch (6 parallel queries, incl. `profiles`) |
 | `auth.ts` | `signIn`, `signUp` (passes name/company + pay info — pay_type, salary or hourly rate/diff/hours — as user metadata), `signOut`, `getSession`, `onAuthChange`, `getProfile`, `updateProfile`; re-exports `AuthSession` so UI never imports supabase-js types |
-| `onboarding.ts` | `setupNewUser(pay)` — seeds starter categories, a salary- or hourly-type paycheck config from the registration pay info, and a first pay period (with hours for hourly users) for fresh accounts (called from `page.tsx` on first authenticated load) |
-| `dashboard.ts` | `togglePeriodLock`, `createPayPeriod` (copies hours from the active period), `updatePeriodHours` (hourly users: saves a period's actual hours and recomputes its gross/paycheck/allocations via `lib/paycheck.ts`) |
+| `onboarding.ts` | `setupNewUser(pay)` — idempotent seed of starter categories, paycheck_config from registration metadata, and a first pay period (fills only what's missing; coalesces concurrent calls). Called from `(app)/layout.tsx` when config, categories, or periods are incomplete |
+| `dashboard.ts` | `togglePeriodLock`, `createPayPeriod` (copies hours from the active period; local calendar dates via `lib/dates.ts`), `updatePeriodHours` (hourly users: saves a period's actual hours and recomputes its gross/paycheck/allocations via `lib/paycheck.ts`) |
 | `expenses.ts` | `addExpense`, `updateExpense`, `deleteExpense` |
 | `investments.ts` | `addInvestment`, `updateInvestmentPosition`, `deleteInvestment` |
+| `quotes.ts` | `fetchQuotes(symbols)` — authenticated call to `/api/quotes` with the session Bearer token |
 | `periods.ts` | `updatePayPeriod`, `deletePayPeriodWithExpenses` (single delete — the expenses FK has `ON DELETE CASCADE`) |
 | `categories.ts` | `addCategory`, `updateCategory`, `deleteCategory` |
-| `admin.ts` | `upsertPaycheckConfig`, `applyConfigToOpenPeriods` (salary: bulk-set, only unlocked periods), `applyHourlyConfigToOpenPeriods` (hourly: same bulk-set to all unlocked periods, but computed from the config's default day/night hours; also resets each period's day_hours/night_hours to that default schedule) |
+| `admin.ts` | `upsertPaycheckConfig`, `applyConfigToOpenPeriods` (salary: bulk-set, only unlocked periods), `applyHourlyConfigToOpenPeriods` (hourly: recomputes each unlocked period from its own day/night hours, falling back to config defaults only when hours are null — does not wipe custom hours) |
 
 All functions return `string | null` (the error message) or a typed result object. None call each other.
 

@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { PayPeriod, PaycheckConfig } from "@/lib/types";
 import { hourlyGross, computeBreakdown, toAllocations } from "@/lib/paycheck";
+import { addDaysLocal } from "@/lib/dates";
 
 export async function togglePeriodLock(id: string, isLocked: boolean): Promise<string | null> {
   const { error } = await supabase
@@ -16,17 +17,17 @@ export async function togglePeriodLock(id: string, isLocked: boolean): Promise<s
 export async function createPayPeriod(
   activePeriod: PayPeriod
 ): Promise<{ data: PayPeriod | null; error: string | null }> {
-  const nextStart = new Date(activePeriod.end_date);
-  nextStart.setDate(nextStart.getDate() + 1);
-  const nextEnd = new Date(nextStart);
+  // Local calendar arithmetic — UTC toISOString().slice would shift dates
+  // around DST and evening local time.
+  const nextStart = addDaysLocal(activePeriod.end_date, 1);
   // +13 not +14: the period spans 14 calendar days and the start day is already day 1.
-  nextEnd.setDate(nextEnd.getDate() + 13);
+  const nextEnd = addDaysLocal(nextStart, 13);
 
   const { data, error } = await supabase
     .from("pay_periods")
     .insert({
-      start_date: nextStart.toISOString().slice(0, 10),
-      end_date: nextEnd.toISOString().slice(0, 10),
+      start_date: nextStart,
+      end_date: nextEnd,
       paycheck_amount: activePeriod.paycheck_amount,
       gross_amount: activePeriod.gross_amount,
       roth_401k: activePeriod.roth_401k,
