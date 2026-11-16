@@ -196,17 +196,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 key={tab.href}
                 href={tab.href}
                 className="header-tab"
-                style={{
-                  display: "inline-block",
-                  border: "none",
-                  borderBottom: `2px solid ${active ? "var(--accent)" : "transparent"}`,
-                  background: "transparent",
-                  color: active ? "var(--text)" : "var(--text-muted)",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  textDecoration: "none",
-                }}
+                data-active={active ? "true" : "false"}
               >
                 {tab.label}
               </Link>
