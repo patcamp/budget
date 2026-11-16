@@ -340,9 +340,25 @@ body {
 }
 
 /* Top header: tabs + account on desktop. On mobile, tabs move to a fixed
-   bottom bar (thumb zone); the top row keeps only name / sign-out. */
+   bottom bar (thumb zone); the top row keeps only name / sign-out.
+   Tab styles live here (not inline) so mobile can hide them without
+   fighting an inline `display` that would win over a class rule. */
 .header-tab {
+  display: inline-block;
   padding: 12px 20px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.header-tab[data-active="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
 }
 
 .header-user {
@@ -357,13 +373,67 @@ body {
   min-height: 100vh;
 }
 
+/* Summary metric strip: always 3 equal columns so Spent's exact-cents
+   sub-line doesn't wrap the card onto its own row on narrow phones. */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.metric-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  min-height: 72px;
+}
+
+.metric-card-sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 2px;
+  min-height: 14px;
+  line-height: 14px;
+}
+
+/* Expense bottom sheet: sticky action bar so iOS keyboard chrome
+   doesn't visually merge with the submit button. */
+.expense-sheet {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(92vh, 720px);
+  background: var(--bg-panel);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  border-top: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.expense-sheet-body {
+  overflow: auto;
+  padding: 8px 16px 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.expense-sheet-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
 @media (max-width: 720px) {
   .app-shell {
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 
   .desktop-nav .header-tab {
-    display: none;
+    display: none !important;
   }
 
   .desktop-nav .header-user {
@@ -409,6 +479,13 @@ body {
   .bottom-nav a .nav-icon {
     font-size: 16px;
     line-height: 1;
+  }
+
+  /* iOS date inputs default to centered text — match other fields. */
+  input[type="date"] {
+    text-align: left;
+    -webkit-appearance: none;
+    appearance: none;
   }
 }
 

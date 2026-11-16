@@ -185,12 +185,12 @@ export default function Dashboard({
                 background: surplus >= 0 ? "var(--success-bg)" : "var(--danger-bg)",
                 border: `1px solid ${surplus >= 0 ? "var(--success-border)" : "var(--danger-border)"}`,
                 borderRadius: 14,
-                padding: "18px 20px",
+                padding: "16px 16px 16px 18px",
                 marginBottom: 14,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-                <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
                     {surplus >= 0 ? "Left to spend" : "Over budget"}
                   </div>
@@ -219,7 +219,7 @@ export default function Dashboard({
                   disabled={busy}
                   className="tap-target"
                   style={{
-                    padding: "10px 14px",
+                    padding: "10px 12px",
                     borderRadius: 8,
                     border: "1px solid",
                     borderColor: isLocked ? "var(--border-strong)" : "var(--accent)",
@@ -230,6 +230,8 @@ export default function Dashboard({
                     cursor: busy ? "wait" : "pointer",
                     opacity: busy ? 0.6 : 1,
                     minHeight: 44,
+                    flexShrink: 0,
+                    alignSelf: "center",
                   }}
                 >
                   {isLocked ? "Unlock" : "Lock period"}
@@ -296,8 +298,8 @@ export default function Dashboard({
               </div>
             )}
 
-            {/* SECONDARY SUMMARY CARDS */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 16 }}>
+            {/* SECONDARY SUMMARY CARDS — always 3 equal columns */}
+            <div className="metric-grid">
               {[
                 { label: "Paycheck", val: fmt(income), color: "var(--text)" },
                 { label: "Budget", val: fmt(totalBudget), color: "var(--purple-text)" },
@@ -308,14 +310,12 @@ export default function Dashboard({
                   color: totalActual > income ? "var(--danger-text)" : "var(--text)",
                 },
               ].map((c) => (
-                <div key={c.label} style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px" }}>
+                <div key={c.label} className="metric-card">
                   <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
                     {c.label}
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.val}</div>
-                  {c.sub && (
-                    <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>{c.sub}</div>
-                  )}
+                  <div style={{ fontSize: 18, fontWeight: 700, color: c.color, letterSpacing: "-0.3px" }}>{c.val}</div>
+                  <div className="metric-card-sub">{c.sub ?? "\u00A0"}</div>
                 </div>
               ))}
             </div>
@@ -499,6 +499,7 @@ export default function Dashboard({
             <div
               role="dialog"
               aria-modal="true"
+              aria-label="Add expense"
               className="show-mobile-flex"
               onClick={() => setAddSheetOpen(false)}
               style={{
@@ -510,20 +511,14 @@ export default function Dashboard({
               }}
             >
               <div
+                className="expense-sheet"
                 onClick={(e) => e.stopPropagation()}
-                style={{
-                  width: "100%",
-                  maxHeight: "85vh",
-                  overflow: "auto",
-                  background: "var(--bg-panel)",
-                  borderTopLeftRadius: 16,
-                  borderTopRightRadius: 16,
-                  padding: "18px 16px calc(18px + env(safe-area-inset-bottom, 0px))",
-                  borderTop: "1px solid var(--border)",
-                }}
               >
-                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 14 }}>
-                  Add expense
+                <div style={{ padding: "10px 16px 0", flexShrink: 0 }}>
+                  <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--border)", margin: "0 auto 12px" }} />
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
+                    Add expense
+                  </div>
                 </div>
                 <AddExpenseForm
                   payPeriodId={activePeriod.id}

@@ -151,7 +151,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "baseline",
+                alignItems: "center",
                 padding: "10px 16px",
                 background: "var(--bg-page)",
                 borderBottom: "1px solid var(--border)",
@@ -164,7 +164,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                   day: "numeric",
                 })}
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{fmt(dayTotal)}</div>
+              <div style={{ fontSize: 11, color: "var(--text-faint)", fontVariantNumeric: "tabular-nums" }}>{fmt(dayTotal)}</div>
             </div>
             {items.map((expense) => {
               const cat = categoryById[expense.category_id];
@@ -259,12 +259,12 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    padding: "10px 16px",
+                    padding: "12px 14px 12px 16px",
                     borderBottom: "1px solid var(--border-soft)",
-                    gap: 10,
+                    gap: 8,
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
                     <div
                       style={{
                         width: 8,
@@ -289,36 +289,53 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                       <div style={{ fontSize: 10, color: "var(--text-faint)" }}>{cat?.name || "Uncategorized"}</div>
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmt(Number(expense.amount))}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", paddingRight: 6, fontVariantNumeric: "tabular-nums" }}>
+                      {fmt(Number(expense.amount))}
+                    </div>
                     {!locked && (
                       <>
                         <button
                           onClick={() => startEdit(expense)}
+                          className="tap-target"
                           style={{
                             background: "transparent",
                             border: "none",
                             color: "var(--text-muted)",
                             cursor: "pointer",
-                            fontSize: 13,
-                            padding: "2px 4px",
+                            fontSize: 15,
+                            width: 40,
+                            height: 40,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 8,
                           }}
                           title="Edit"
+                          aria-label="Edit expense"
                         >
                           ✎
                         </button>
                         <button
                           onClick={() => handleDelete(expense.id)}
                           disabled={deletingId === expense.id}
+                          className="tap-target"
                           style={{
                             background: "transparent",
                             border: "none",
-                            color: "#7F1D1D",
+                            color: "#F87171",
                             cursor: "pointer",
-                            fontSize: 14,
-                            padding: "2px 4px",
+                            fontSize: 20,
+                            width: 40,
+                            height: 40,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 8,
+                            opacity: deletingId === expense.id ? 0.5 : 1,
                           }}
                           title="Delete"
+                          aria-label="Delete expense"
                         >
                           ×
                         </button>
