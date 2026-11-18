@@ -1,12 +1,16 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { addInvestment, deleteInvestment, updateInvestmentPosition } from "@/components/api/investments";
+import { logInvestmentBuy, deleteInvestment, deleteInvestmentPurchase } from "@/components/api/investments";
 import { fetchQuotes, QuoteResult } from "@/components/api/quotes";
-import { Investment } from "@/lib/types";
+import { toLocalDateString } from "@/lib/dates";
+import { Investment, InvestmentPurchase, PayPeriod, PaycheckConfig } from "@/lib/types";
 
 interface Props {
   investments: Investment[];
+  purchases: InvestmentPurchase[];
+  payPeriods: PayPeriod[];
+  paycheckConfig: PaycheckConfig | null;
   onRefresh: () => Promise<void>;
 }
 
@@ -18,7 +22,40 @@ function fmtPct(n: number) {
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
-const BLANK_FORM = { ticker: "", account: "", shares: "", cost_per_share: "" };
+function fmtDate(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function periodLabel(p: PayPeriod) {
+  return `${fmtDate(p.start_date)} – ${fmtDate(p.end_date)}`;
+}
+
+type EntryMode = "shares" | "dollars";
+
+type FormState = {
+  ticker: string;
+  account: string;
+  mode: EntryMode;
+  shares: string;
+  dollars: string;
+  price_per_share: string;
+  purchased_at: string;
+  pay_period_id: string;
+};
+
+function blankForm(defaultPeriodId: string): FormState {
+  return {
+    ticker: "",
+    account: "",
+    mode: "dollars",
+    shares: "",
+    dollars: "",
+    price_per_share: "",
+    purchased_at: toLocalDateString(),
+    pay_period_id: defaultPeriodId,
+  };
+}
 
 type Enriched = Investment & {
   price: number;
@@ -125,20 +162,52 @@ function HoldingCards({
   );
 }
 
-export default function InvestmentPanel({ investments, onRefresh }: Props) {
+export default function InvestmentPanel({
+  investments,
+  purchases,
+  payPeriods,
+  paycheckConfig,
+  onRefresh,
+}: Props) {
+  const latestPeriodId = payPeriods.length ? payPeriods[payPeriods.length - 1].id : "";
   const [quotes, setQuotes] = useState<Record<string, QuoteResult>>({});
   const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [quotesError, setQuotesError] = useState<string | null>(null);
-  const [form, setForm] = useState(BLANK_FORM);
+  const [form, setForm] = useState<FormState>(() => blankForm(latestPeriodId));
   const [adding, setAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingPurchaseId, setDeletingPurchaseId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [priceTouched, setPriceTouched] = useState(false);
 
   const tickers = useMemo(
     () => [...new Set(investments.map((i) => i.ticker.toUpperCase()))],
     [investments]
   );
   const tickersKey = tickers.join(",");
+
+  const accountSuggestions = useMemo(() => {
+    const names = new Set<string>();
+    for (const inv of investments) {
+      if (inv.account.trim()) names.add(inv.account.trim());
+    }
+    for (const acct of paycheckConfig?.accounts ?? []) {
+      if (acct.name.trim() && acct.type !== "spending") names.add(acct.name.trim());
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [investments, paycheckConfig]);
+
+  const investmentById = useMemo(() => {
+    const map = new Map<string, Investment>();
+    for (const inv of investments) map.set(inv.id, inv);
+    return map;
+  }, [investments]);
+
+  const periodById = useMemo(() => {
+    const map = new Map<string, PayPeriod>();
+    for (const p of payPeriods) map.set(p.id, p);
+    return map;
+  }, [payPeriods]);
 
   useEffect(() => {
     if (!tickers.length) {
@@ -163,6 +232,33 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
       cancelled = true;
     };
   }, [tickersKey]);
+
+  // Prefill price from live quote when ticker matches and user hasn't edited price.
+  useEffect(() => {
+    const ticker = form.ticker.trim().toUpperCase();
+    if (!ticker || priceTouched) return;
+    const quote = quotes[ticker];
+    if (quote?.ok && quote.price > 0) {
+      setForm((f) => ({ ...f, price_per_share: quote.price.toFixed(2) }));
+    }
+  }, [form.ticker, quotes, priceTouched]);
+
+  // Fetch a quote for a typed ticker that isn't already in holdings.
+  useEffect(() => {
+    const ticker = form.ticker.trim().toUpperCase();
+    if (!ticker || ticker.length < 1 || quotes[ticker]) return;
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      fetchQuotes([ticker]).then(({ data }) => {
+        if (cancelled || !data[ticker]) return;
+        setQuotes((prev) => ({ ...prev, ...data }));
+      });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [form.ticker, quotes]);
 
   const enriched: Enriched[] = useMemo(
     () =>
@@ -207,46 +303,67 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [enriched]);
 
-  async function handleAddHolding() {
+  const periodContributed = useMemo(() => {
+    if (!latestPeriodId) return 0;
+    return purchases
+      .filter((p) => p.pay_period_id === latestPeriodId)
+      .reduce((s, p) => s + Number(p.amount), 0);
+  }, [purchases, latestPeriodId]);
+
+  async function handleLogBuy() {
     const ticker = form.ticker.trim().toUpperCase();
     const account = form.account.trim();
-    const shares = parseFloat(form.shares);
-    const cost = parseFloat(form.cost_per_share);
+    const price = parseFloat(form.price_per_share);
 
     if (!ticker) { setFormError("Ticker is required."); return; }
     if (!account) { setFormError("Account is required."); return; }
-    if (!shares || shares <= 0) { setFormError("Shares must be > 0."); return; }
-    if (!cost || cost < 0) { setFormError("Cost per share must be ≥ 0."); return; }
+    if (!price || price < 0) { setFormError("Price per share must be ≥ 0."); return; }
+
+    let shares: number;
+    if (form.mode === "dollars") {
+      const dollars = parseFloat(form.dollars);
+      if (!dollars || dollars <= 0) { setFormError("Amount must be > 0."); return; }
+      if (price === 0) { setFormError("Need a price to convert dollars to shares."); return; }
+      shares = dollars / price;
+    } else {
+      shares = parseFloat(form.shares);
+      if (!shares || shares <= 0) { setFormError("Shares must be > 0."); return; }
+    }
 
     setAdding(true);
     setFormError(null);
 
-    const existing = investments.find(
-      (i) => i.ticker.toUpperCase() === ticker && i.account.trim() === account
-    );
-
-    let err: string | null;
-    if (existing) {
-      const existingShares = Number(existing.shares);
-      const newShares = existingShares + shares;
-      const newCost = (existingShares * Number(existing.cost_per_share) + shares * cost) / newShares;
-      err = await updateInvestmentPosition(existing.id, newShares, newCost);
-    } else {
-      err = await addInvestment({ ticker, account, shares, cost_per_share: cost });
-    }
+    const err = await logInvestmentBuy({
+      ticker,
+      account,
+      shares,
+      price_per_share: price,
+      purchased_at: form.purchased_at || toLocalDateString(),
+      pay_period_id: form.pay_period_id || null,
+    });
 
     setAdding(false);
-    if (err) { setFormError(`Failed to add: ${err}`); return; }
-    setForm(BLANK_FORM);
+    if (err) { setFormError(`Failed to log buy: ${err}`); return; }
+    setForm(blankForm(form.pay_period_id || latestPeriodId));
+    setPriceTouched(false);
     await onRefresh();
   }
 
   async function handleDeleteHolding(id: string) {
-    if (!confirm("Remove this holding?")) return;
+    if (!confirm("Remove this holding and all its purchase history?")) return;
     setDeletingId(id);
     const err = await deleteInvestment(id);
     setDeletingId(null);
     if (err) { alert(`Failed to delete: ${err}`); return; }
+    await onRefresh();
+  }
+
+  async function handleDeletePurchase(id: string) {
+    if (!confirm("Undo this buy? Shares will be removed from the holding.")) return;
+    setDeletingPurchaseId(id);
+    const err = await deleteInvestmentPurchase(id);
+    setDeletingPurchaseId(null);
+    if (err) { alert(`Failed to undo buy: ${err}`); return; }
     await onRefresh();
   }
 
@@ -264,12 +381,25 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
     boxSizing: "border-box",
   };
 
+  const modeBtn = (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    padding: "8px 12px",
+    background: active ? "var(--accent-strong)" : "transparent",
+    border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+    borderRadius: 7,
+    color: active ? "var(--accent-text)" : "var(--text-muted)",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+    minHeight: 40,
+  });
+
   return (
     <div style={{ padding: "16px 16px", paddingBottom: 80 }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Investments</div>
         <div style={{ fontSize: 12, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          Live prices via Yahoo Finance
+          Log each buy · holdings roll up automatically · live prices via Yahoo Finance
           {loadingQuotes && <span style={{ color: "var(--warning-text)" }}>· refreshing…</span>}
           {quotesError && <span style={{ color: "var(--danger-text)" }}>· {quotesError}</span>}
         </div>
@@ -281,12 +411,169 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
           { label: "Market Value", val: fmtDollar(totalValue), color: "var(--text)" },
           { label: "Gain / Loss", val: fmtDollar(totalGain), color: gainColor(totalGain) },
           { label: "Return", val: fmtPct(totalReturn), color: gainColor(totalReturn) },
+          ...(latestPeriodId
+            ? [{ label: "This Period Buys", val: fmtDollar(periodContributed), color: "var(--text)" }]
+            : []),
         ].map((c) => (
           <div key={c.label} style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px" }}>
             <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>{c.label}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{investments.length ? c.val : "—"}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: c.color }}>
+              {c.label === "This Period Buys" ? c.val : investments.length ? c.val : "—"}
+            </div>
           </div>
         ))}
+      </div>
+
+      {/* Log a buy — primary action for recurring contributions */}
+      <div style={{ ...panelStyle, marginBottom: 16, padding: 16 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>
+          Log a Buy
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, maxWidth: 280 }}>
+          <button type="button" style={modeBtn(form.mode === "dollars")} onClick={() => setForm((f) => ({ ...f, mode: "dollars" }))}>
+            By dollars
+          </button>
+          <button type="button" style={modeBtn(form.mode === "shares")} onClick={() => setForm((f) => ({ ...f, mode: "shares" }))}>
+            By shares
+          </button>
+        </div>
+
+        <div className="invest-add-grid" style={{ display: "grid", gridTemplateColumns: "100px 1fr 120px 120px", gap: 10, alignItems: "end" }}>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>TICKER</div>
+            <input
+              style={{ ...inputStyle, textTransform: "uppercase" }}
+              placeholder="VOO"
+              value={form.ticker}
+              onChange={(e) => {
+                setPriceTouched(false);
+                setForm((f) => ({ ...f, ticker: e.target.value }));
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>ACCOUNT</div>
+            <input
+              style={inputStyle}
+              list="invest-account-suggestions"
+              placeholder="Roth 401k"
+              value={form.account}
+              onChange={(e) => setForm((f) => ({ ...f, account: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+            />
+            <datalist id="invest-account-suggestions">
+              {accountSuggestions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          </div>
+          {form.mode === "dollars" ? (
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>DOLLARS</div>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                style={inputStyle}
+                placeholder="500.00"
+                value={form.dollars}
+                onChange={(e) => setForm((f) => ({ ...f, dollars: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+              />
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>SHARES</div>
+              <input
+                type="number"
+                step="0.0001"
+                min="0"
+                style={inputStyle}
+                placeholder="10"
+                value={form.shares}
+                onChange={(e) => setForm((f) => ({ ...f, shares: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+              />
+            </div>
+          )}
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>PRICE / SHARE</div>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              style={inputStyle}
+              placeholder="450.00"
+              value={form.price_per_share}
+              onChange={(e) => {
+                setPriceTouched(true);
+                setForm((f) => ({ ...f, price_per_share: e.target.value }));
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+            />
+          </div>
+        </div>
+
+        <div className="invest-buy-meta" style={{ display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 10, alignItems: "end", marginTop: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>DATE</div>
+            <input
+              type="date"
+              style={inputStyle}
+              value={form.purchased_at}
+              onChange={(e) => setForm((f) => ({ ...f, purchased_at: e.target.value }))}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>PAY PERIOD</div>
+            <select
+              style={inputStyle}
+              value={form.pay_period_id}
+              onChange={(e) => setForm((f) => ({ ...f, pay_period_id: e.target.value }))}
+            >
+              <option value="">None</option>
+              {[...payPeriods].reverse().map((p) => (
+                <option key={p.id} value={p.id}>
+                  {periodLabel(p)}
+                  {p.id === latestPeriodId ? " (current)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={handleLogBuy}
+            disabled={adding}
+            style={{
+              padding: "10px 18px",
+              background: "var(--accent-strong)",
+              border: "1px solid var(--accent)",
+              borderRadius: 8,
+              color: "var(--accent-text)",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: adding ? "wait" : "pointer",
+              opacity: adding ? 0.6 : 1,
+              whiteSpace: "nowrap",
+              minHeight: 44,
+            }}
+          >
+            {adding ? "Logging…" : "Log buy"}
+          </button>
+        </div>
+
+        {form.mode === "dollars" && parseFloat(form.dollars) > 0 && parseFloat(form.price_per_share) > 0 && (
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10 }}>
+            ≈ {(parseFloat(form.dollars) / parseFloat(form.price_per_share)).toLocaleString("en-US", { maximumFractionDigits: 4 })} shares
+          </div>
+        )}
+        {formError && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "var(--danger-text)" }}>{formError}</div>
+        )}
+        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 10 }}>
+          Same ticker + account merges into one holding (weighted avg cost). Price prefills from Yahoo when available.
+        </div>
       </div>
 
       {investments.length > 0 && (
@@ -319,7 +606,6 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
                 {account}
               </div>
 
-              {/* Desktop table */}
               <div className="hide-mobile">
                 <div className="scroll-x">
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -379,7 +665,6 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
                 </div>
               </div>
 
-              {/* Mobile cards */}
               <div className="show-mobile">
                 <HoldingCards holdings={holdings} deletingId={deletingId} onDelete={handleDeleteHolding} />
               </div>
@@ -390,89 +675,108 @@ export default function InvestmentPanel({ investments, onRefresh }: Props) {
 
       {investments.length === 0 && (
         <div style={{ ...panelStyle, textAlign: "center", color: "var(--text-faint)", fontSize: 13, marginBottom: 16, padding: 20 }}>
-          No holdings yet. Add one below.
+          No holdings yet. Log your first buy above — each paycheck contribution becomes another buy against the same ticker.
         </div>
       )}
 
-      <div style={{ ...panelStyle, padding: 16 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>Add Holding</div>
-        <div
-          className="invest-add-grid"
-          style={{ display: "grid", gridTemplateColumns: "100px 1fr 120px 140px auto", gap: 10, alignItems: "end" }}
-        >
-          <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>TICKER</div>
-            <input
-              style={{ ...inputStyle, textTransform: "uppercase" }}
-              placeholder="VOO"
-              value={form.ticker}
-              onChange={(e) => setForm((f) => ({ ...f, ticker: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && handleAddHolding()}
-            />
+      {purchases.length > 0 && (
+        <div style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>
+            Purchase History
           </div>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>ACCOUNT</div>
-            <input
-              style={inputStyle}
-              placeholder="Roth 401k"
-              value={form.account}
-              onChange={(e) => setForm((f) => ({ ...f, account: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && handleAddHolding()}
-            />
+
+          <div className="hide-mobile">
+            <div className="scroll-x">
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    {["Date", "Ticker", "Account", "Shares", "Price", "Amount", "Period", ""].map((h) => (
+                      <th key={h} style={{ textAlign: h === "" ? "center" : h === "Date" || h === "Ticker" || h === "Account" || h === "Period" ? "left" : "right", padding: "0 10px 10px", fontSize: 10, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchases.map((buy) => {
+                    const holding = investmentById.get(buy.investment_id);
+                    const period = buy.pay_period_id ? periodById.get(buy.pay_period_id) : null;
+                    return (
+                      <tr key={buy.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
+                        <td style={{ padding: "10px 10px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtDate(buy.purchased_at)}</td>
+                        <td style={{ padding: "10px 10px", fontWeight: 700, color: "var(--text)" }}>{holding?.ticker ?? "—"}</td>
+                        <td style={{ padding: "10px 10px", color: "var(--text-muted)" }}>{holding?.account ?? "—"}</td>
+                        <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text-muted)" }}>
+                          {Number(buy.shares).toLocaleString("en-US", { maximumFractionDigits: 4 })}
+                        </td>
+                        <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text-muted)" }}>{fmtDollar(Number(buy.price_per_share))}</td>
+                        <td style={{ textAlign: "right", padding: "10px 10px", fontWeight: 600, color: "var(--text)" }}>{fmtDollar(Number(buy.amount))}</td>
+                        <td style={{ padding: "10px 10px", color: "var(--text-faint)", fontSize: 12 }}>
+                          {period ? periodLabel(period) : "—"}
+                        </td>
+                        <td style={{ textAlign: "center", padding: "10px 6px" }}>
+                          <button
+                            onClick={() => handleDeletePurchase(buy.id)}
+                            disabled={deletingPurchaseId === buy.id}
+                            style={{ background: "transparent", border: "none", color: "#7F1D1D", cursor: "pointer", fontSize: 14, padding: "8px 10px", opacity: deletingPurchaseId === buy.id ? 0.4 : 1, minWidth: 44, minHeight: 44 }}
+                            title="Undo buy"
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>SHARES</div>
-            <input
-              type="number"
-              step="0.0001"
-              min="0"
-              style={inputStyle}
-              placeholder="10"
-              value={form.shares}
-              onChange={(e) => setForm((f) => ({ ...f, shares: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && handleAddHolding()}
-            />
+
+          <div className="show-mobile" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {purchases.map((buy) => {
+              const holding = investmentById.get(buy.investment_id);
+              const period = buy.pay_period_id ? periodById.get(buy.pay_period_id) : null;
+              return (
+                <div key={buy.id} style={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 10, padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: "var(--text)" }}>
+                        {holding?.ticker ?? "—"} · {fmtDollar(Number(buy.amount))}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>
+                        {fmtDate(buy.purchased_at)} · {Number(buy.shares).toLocaleString("en-US", { maximumFractionDigits: 4 })} @ {fmtDollar(Number(buy.price_per_share))}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                        {holding?.account ?? "—"}
+                        {period ? ` · ${periodLabel(period)}` : ""}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDeletePurchase(buy.id)}
+                      disabled={deletingPurchaseId === buy.id}
+                      className="tap-target"
+                      style={{
+                        background: "transparent",
+                        border: "1px solid var(--danger-border)",
+                        borderRadius: 8,
+                        color: "var(--danger-text)",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: "8px 12px",
+                        opacity: deletingPurchaseId === buy.id ? 0.4 : 1,
+                        minHeight: 44,
+                      }}
+                    >
+                      Undo
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>AVG COST / SHARE</div>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              style={inputStyle}
-              placeholder="450.00"
-              value={form.cost_per_share}
-              onChange={(e) => setForm((f) => ({ ...f, cost_per_share: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && handleAddHolding()}
-            />
-          </div>
-          <button
-            onClick={handleAddHolding}
-            disabled={adding}
-            style={{
-              padding: "10px 18px",
-              background: "var(--accent-strong)",
-              border: "1px solid var(--accent)",
-              borderRadius: 8,
-              color: "var(--accent-text)",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: adding ? "wait" : "pointer",
-              opacity: adding ? 0.6 : 1,
-              whiteSpace: "nowrap",
-              minHeight: 44,
-            }}
-          >
-            {adding ? "Adding…" : "Add"}
-          </button>
         </div>
-        {formError && (
-          <div style={{ marginTop: 10, fontSize: 12, color: "var(--danger-text)" }}>{formError}</div>
-        )}
-        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 10 }}>
-          Prices from Yahoo Finance. Standard tickers: VOO, VTI, VTSAX, AAPL, BTC-USD, etc.
-        </div>
-      </div>
+      )}
     </div>
   );
 }

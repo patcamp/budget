@@ -12,4 +12,5 @@ Key types:
 - `PayPeriod` — includes `allocations: { name, type, amount }[] | null` (JSONB), populated by the paycheck config calculator, and `day_hours`/`night_hours` (null for salary users)
 - `Category` — includes `archived`, `sort_order`, and `note`; `archived` is the soft-delete flag
 - `PaycheckConfig` — stores salary, deduction, and tax-rate fields; the `accounts` field is a JSONB array of `Account` objects
-- `Investment` — ticker, account label, shares, cost_per_share
+- `Investment` — ticker, account label, shares, cost_per_share (rolled-up position)
+- `InvestmentPurchase` — one buy against a holding (shares, price_per_share, amount, purchased_at, optional pay_period_id)

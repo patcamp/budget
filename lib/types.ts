@@ -90,3 +90,17 @@ export interface Investment {
   cost_per_share: number;
   created_at: string;
 }
+
+/** One buy against a holding — source of recurring contribution history. */
+export interface InvestmentPurchase {
+  id: string;
+  user_id: string;
+  investment_id: string;
+  pay_period_id: string | null;
+  shares: number;
+  price_per_share: number;
+  amount: number;
+  purchased_at: string; // YYYY-MM-DD
+  notes: string | null;
+  created_at: string;
+}

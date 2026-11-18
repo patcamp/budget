@@ -44,6 +44,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [expenses, setExpenses] = useState<PageData["expenses"]>([]);
   const [paycheckConfig, setPaycheckConfig] = useState<PageData["paycheckConfig"]>(null);
   const [investments, setInvestments] = useState<PageData["investments"]>([]);
+  const [investmentPurchases, setInvestmentPurchases] = useState<PageData["investmentPurchases"]>([]);
   const [profile, setProfile] = useState<PageData["profile"]>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +106,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setExpenses(pageData.expenses);
     setPaycheckConfig(pageData.paycheckConfig);
     setInvestments(pageData.investments);
+    setInvestmentPurchases(pageData.investmentPurchases);
     setProfile(pageData.profile);
     setLoading(false);
   }, []);
@@ -122,6 +124,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setExpenses([]);
       setPaycheckConfig(null);
       setInvestments([]);
+      setInvestmentPurchases([]);
       setProfile(null);
       setError(null);
       setLoading(false);
@@ -182,7 +185,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetDataContext.Provider
-      value={{ payPeriods, categories, expenses, paycheckConfig, investments, profile, error: null, onRefresh: loadAll }}
+      value={{
+        payPeriods,
+        categories,
+        expenses,
+        paycheckConfig,
+        investments,
+        investmentPurchases,
+        profile,
+        error: null,
+        onRefresh: loadAll,
+      }}
     >
       <div className="app-shell">
         <div

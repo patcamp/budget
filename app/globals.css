@@ -661,14 +661,22 @@ select {
   font-family: inherit;
 }
 
-/* Investments add form: 5-col desktop → stacked on mobile */
+/* Investments buy form: 4-col + meta row on desktop → stacked on mobile */
 @media (max-width: 720px) {
   .invest-add-grid {
     grid-template-columns: 1fr 1fr !important;
   }
 
-  .invest-add-grid > :nth-child(2),
-  .invest-add-grid > :nth-child(5) {
+  .invest-add-grid > :nth-child(2) {
+    grid-column: 1 / -1;
+  }
+
+  .invest-buy-meta {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .invest-buy-meta > :nth-child(2),
+  .invest-buy-meta > :nth-child(3) {
     grid-column: 1 / -1;
   }
 }

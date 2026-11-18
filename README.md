@@ -91,7 +91,7 @@ Read-only, multi-period analysis. Select which periods to include (Last 3 / Last
 
 ### Investments tab
 
-Track portfolio holdings by ticker and account. Enter shares and average cost per share; live prices are fetched from Yahoo Finance on load. Shows total invested, market value, gain/loss, and return — broken out by account and by individual holding.
+Log each buy (by dollars or by shares) against a ticker + account. Repeats merge into one holding with a weighted average cost, and every buy is kept in purchase history so paycheck-style DCA is easy to track. Optionally tag a buy to a pay period. Live prices come from Yahoo Finance. Shows total invested, market value, gain/loss, return, this-period contributions, and a full buy log.
 
 Supported symbols: standard tickers (VOO, VTI, AAPL), mutual funds (FXAIX, VTSAX), crypto (BTC-USD), etc.
 
@@ -116,10 +116,10 @@ budget/
 │   └── globals.css
 ├── components/
 │   ├── api/                  # all Supabase calls (no JSX)
-│   │   ├── data.ts           # loadPageData() — 5 parallel queries
+│   │   ├── data.ts           # loadPageData() — 7 parallel queries
 │   │   ├── dashboard.ts      # togglePeriodLock, createPayPeriod
 │   │   ├── expenses.ts       # addExpense, deleteExpense
-│   │   ├── investments.ts    # addInvestment, deleteInvestment
+│   │   ├── investments.ts    # logInvestmentBuy, deleteInvestmentPurchase, deleteInvestment
 │   │   ├── periods.ts        # updatePayPeriod, deletePayPeriodWithExpenses
 │   │   ├── categories.ts     # addCategory, updateCategory, deleteCategory
 │   │   └── admin.ts          # upsertPaycheckConfig, applyConfigToOpenPeriods
