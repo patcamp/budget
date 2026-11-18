@@ -9,12 +9,12 @@ Split into two subdirectories:
 
 | File | What it owns |
 |------|-------------|
-| `data.ts` | `loadPageData()` — the single page-level fetch (6 parallel queries, incl. `profiles`) |
+| `data.ts` | `loadPageData()` — the single page-level fetch (7 parallel queries, incl. `profiles` + `investment_purchases`) |
 | `auth.ts` | `signIn`, `signUp` (passes name/company + pay info — pay_type, salary or hourly rate/diff/hours — as user metadata), `signOut`, `getSession`, `onAuthChange`, `getProfile`, `updateProfile`; re-exports `AuthSession` so UI never imports supabase-js types |
 | `onboarding.ts` | `setupNewUser(pay)` — idempotent seed of starter categories, paycheck_config from registration metadata, and a first pay period (fills only what's missing; coalesces concurrent calls). Called from `(app)/layout.tsx` when config, categories, or periods are incomplete |
 | `dashboard.ts` | `togglePeriodLock`, `createPayPeriod` (copies hours from the active period; local calendar dates via `lib/dates.ts`), `updatePeriodHours` (hourly users: saves a period's actual hours and recomputes its gross/paycheck/allocations via `lib/paycheck.ts`) |
 | `expenses.ts` | `addExpense`, `updateExpense`, `deleteExpense` |
-| `investments.ts` | `addInvestment`, `updateInvestmentPosition`, `deleteInvestment` |
+| `investments.ts` | `logInvestmentBuy`, `deleteInvestmentPurchase`, `deleteInvestment` |
 | `quotes.ts` | `fetchQuotes(symbols)` — authenticated call to `/api/quotes` with the session Bearer token |
 | `periods.ts` | `updatePayPeriod`, `deletePayPeriodWithExpenses` (single delete — the expenses FK has `ON DELETE CASCADE`) |
 | `categories.ts` | `addCategory`, `updateCategory`, `deleteCategory` |
@@ -40,7 +40,7 @@ All functions return `string | null` (the error message) or a typed result objec
 
 **`PeriodFilter.tsx`** — multi-select period picker used by Overview. Toggle-based (vs. single-select in PayPeriodPicker). Preset buttons: Last 3 / Last 6 / All Time.
 
-**`InvestmentPanel.tsx`** — "Investments" tab. Fetches live prices from `/api/quotes` on mount (and whenever the ticker list changes). Groups holdings by account. Uses `tickers.join(",")` as the `useEffect` dep to avoid infinite re-renders from array identity changes. Adding a holding that matches an existing row's ticker (case-insensitive) + account (trimmed, case-sensitive) merges into it — shares are summed and `cost_per_share` becomes the share-weighted average — instead of inserting a duplicate row.
+**`InvestmentPanel.tsx`** — "Investments" tab. Primary action is **Log a buy** (by dollars or by shares), not "set my position." Each buy appends an `investment_purchases` row and merges into the ticker+account holding (weighted avg cost). Prefills price from Yahoo when the ticker resolves; optional pay-period link defaults to the latest period. Shows rolled-up holdings by account, a "This Period Buys" total, and a purchase-history list (undo reverses the buy out of the holding). Uses `tickers.join(",")` as the quotes `useEffect` dep to avoid infinite re-renders from array identity changes.
 
 **`AdminPanel.tsx`** — "Admin" tab with 4 sub-tabs. Its form helpers (`NumField`, `SectionLabel`, `PreviewRow`) are defined at **module scope, not inside `AdminPanel`** — a component defined inside its parent's function body gets a new identity every render, so React remounts its DOM (and any focused `<input>` loses focus) on every keystroke. Keep any new helper components at module scope and pass `value`/`onChange` explicitly. The Paycheck layout uses the `.paycheck-grid` class and the Pay Periods/Categories tables use the `.admin-row`/`data-label` responsive pattern (both defined in `app/globals.css`). Sub-tabs:
 - **Paycheck** — Salary/Hourly pay-type toggle. Salary mode: annual salary ÷ periods. Hourly mode: base rate, night differential (flat $ or % toggle), default day/night hours per period. Both share the deductions/tax/accounts panels and preview (math lives in `lib/paycheck.ts`); "Save & Apply" bulk-sets salary periods but recomputes hourly periods individually from their own hours.

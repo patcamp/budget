@@ -449,3 +449,35 @@ create unique index if not exists pay_periods_user_start_date_key
 -- One lot per ticker+account per user (UI already merges; DB enforces).
 create unique index if not exists investments_user_ticker_account_key
   on investments (user_id, upper(ticker), account);
+
+-- ============================================================
+-- INVESTMENT PURCHASES (2026-11-18)
+-- Recurring buy log. Holdings (`investments`) stay the rolled-up
+-- position (shares + avg cost); each buy appends a purchase row
+-- so DCA / paycheck contributions have history. Run in Supabase
+-- SQL Editor on existing projects.
+-- ============================================================
+create table if not exists investment_purchases (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  investment_id uuid not null references investments(id) on delete cascade,
+  pay_period_id uuid references pay_periods(id) on delete set null,
+  shares numeric(12,6) not null check (shares > 0),
+  price_per_share numeric(10,4) not null check (price_per_share >= 0),
+  amount numeric(12,2) not null check (amount >= 0),
+  purchased_at date not null default (current_date),
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+alter table investment_purchases enable row level security;
+
+drop policy if exists "Own rows" on investment_purchases;
+create policy "Own rows" on investment_purchases
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists investment_purchases_user_purchased_at
+  on investment_purchases (user_id, purchased_at desc);
+
+create index if not exists investment_purchases_investment
+  on investment_purchases (investment_id);
