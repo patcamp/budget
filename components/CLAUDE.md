@@ -32,7 +32,7 @@ All functions return `string | null` (the error message) or a typed result objec
 
 **`CategoryTile.tsx`** — per-category spend card with an expandable inline expense list. Progress bar is capped at 105% so it renders visibly "full" when over budget. Takes a `categories` prop (the full list, not just its own `category`) so the inline edit form can reassign an expense to a different category — same edit/save pattern as `Statement.tsx`, condensed for the tile's narrower width.
 
-**`AddExpenseForm.tsx`** — owns its own form state, calls `addExpense`, then calls `onAdded` (→ `onRefresh`).
+**`AddExpenseForm.tsx`** — controlled draft via `useExpenseDraft` (owned by `Dashboard` so the desktop inline form and mobile sheet share one state). Persists amount/description/category/date to `sessionStorage` through `lib/draftStorage.ts` so typed fields survive remounts when switching apps or tabs; clears the draft on successful submit. Calls `addExpense`, then `onAdded` (→ `onRefresh`).
 
 **`PayPeriodPicker.tsx`** — pure presentational period selector pills + "New Pay Period" button. No Supabase calls.
 

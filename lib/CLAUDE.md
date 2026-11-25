@@ -2,6 +2,7 @@
 
 - `supabase.ts` — single exported `supabase` client instance (`createClient` from `@supabase/supabase-js`), built from `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`. Imported only by `components/api/` files — UI components must not import it directly.
 - `dates.ts` — local-calendar helpers (`toLocalDateString`, `parseLocalDate`, `addDaysLocal`). Use these for any YYYY-MM-DD value — never `Date#toISOString().slice(0,10)`, which shifts the day around evening US time and DST.
+- `draftStorage.ts` — tiny `sessionStorage` helpers (`readDraft` / `writeDraft` / `clearDraft`) for in-progress form drafts. Best-effort (swallows private-mode/quota errors); covered by `draftStorage.test.ts`.
 - `paycheck.ts` — pure paycheck math, no Supabase: `hourlyGross`/`nightRate` (hourly pay with flat-$ or % night differential), `computeBreakdown` (gross → pre-tax → taxes → post-tax → net split across accounts), `toAllocations` (breakdown → the allocations JSONB shape). Shared by AdminPanel's config preview/save and the Dashboard hours editor — change paycheck math here, not in components.
 - `paycheck.test.ts` / `dates.test.ts` — vitest unit tests (`npm test`). Extend them when you touch the math or date helpers.
 - `types.ts` — TypeScript interfaces for every DB table and shared shape. Must stay in exact sync with `supabase/schema.sql` column-for-column (names, nullability) — there's no codegen, so if you change the schema, update both files by hand.

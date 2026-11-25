@@ -51,6 +51,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Bumps on every auth change / load kickoff so a slower in-flight fetch
   // for a previous user can't overwrite state after a sign-out or switch.
   const loadGen = useRef(0);
+  // Tracks which user we've already loaded data for. Token refreshes replace
+  // the session object without changing the user — remounting on those would
+  // wipe in-progress form drafts when switching to another app and back.
+  const loadedForUserId = useRef<string | null>(null);
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
@@ -112,13 +116,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Invalidate any in-flight load from the previous session immediately.
-    loadGen.current += 1;
-    if (session) {
-      setLoading(true);
-      loadAll();
-    } else {
+    if (!session) {
       // Signed out — drop the previous user's data from state.
+      loadedForUserId.current = null;
+      loadGen.current += 1;
       setPayPeriods([]);
       setCategories([]);
       setExpenses([]);
@@ -128,7 +129,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setProfile(null);
       setError(null);
       setLoading(false);
+      return;
     }
+
+    // Same user (e.g. TOKEN_REFRESHED after returning from another app) —
+    // keep the tree mounted so form drafts stay in React state.
+    if (loadedForUserId.current === session.user.id) return;
+
+    loadedForUserId.current = session.user.id;
+    loadGen.current += 1;
+    setLoading(true);
+    loadAll();
   }, [session, loadAll]);
 
   // Applies the signed-in user's saved theme and keeps the localStorage
