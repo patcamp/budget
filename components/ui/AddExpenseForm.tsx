@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { addExpense } from "@/components/api/expenses";
+import { clearDraft, readDraft, writeDraft } from "@/lib/draftStorage";
 import { Category } from "@/lib/types";
 import { toLocalDateString } from "@/lib/dates";
 
@@ -13,6 +14,98 @@ interface Props {
   layout?: "inline" | "stacked";
   onClose?: () => void;
   autoFocusAmount?: boolean;
+  /** Shared draft from Dashboard so desktop + mobile sheet stay in sync. */
+  draft: ExpenseDraftControls;
+}
+
+const DRAFT_KEY = "budget:add-expense-draft";
+
+export interface ExpenseDraftValues {
+  categoryId: string;
+  amount: string;
+  description: string;
+  date: string;
+}
+
+export interface ExpenseDraftControls extends ExpenseDraftValues {
+  setCategoryId: (v: string) => void;
+  setAmount: (v: string) => void;
+  setDescription: (v: string) => void;
+  setDate: (v: string) => void;
+  clear: () => void;
+}
+
+interface StoredExpenseDraft extends ExpenseDraftValues {
+  payPeriodId: string;
+}
+
+function draftIsEmpty(d: Pick<ExpenseDraftValues, "amount" | "description" | "date">, today: string) {
+  return !d.amount && !d.description && d.date === today;
+}
+
+function readInitialDraft(payPeriodId: string, categories: Category[]): ExpenseDraftValues {
+  const today = toLocalDateString();
+  const fallbackCategory = categories[0]?.id || "";
+  const saved = readDraft<StoredExpenseDraft>(DRAFT_KEY);
+  if (!saved) {
+    return { categoryId: fallbackCategory, amount: "", description: "", date: today };
+  }
+  const categoryOk =
+    saved.categoryId && categories.some((c) => c.id === saved.categoryId)
+      ? saved.categoryId
+      : fallbackCategory;
+  // Keep typed fields even if the period changed — user often switches
+  // period mid-entry or returns via a bookmark with a different ?period=.
+  return {
+    categoryId: categoryOk,
+    amount: saved.amount || "",
+    description: saved.description || "",
+    date: saved.date || today,
+  };
+}
+
+/** Own the add-expense draft once (in Dashboard) so desktop + mobile share it. */
+export function useExpenseDraft(payPeriodId: string, categories: Category[]): ExpenseDraftControls {
+  const [seed] = useState(() => readInitialDraft(payPeriodId, categories));
+  const [categoryId, setCategoryId] = useState(seed.categoryId);
+  const [amount, setAmount] = useState(seed.amount);
+  const [description, setDescription] = useState(seed.description);
+  const [date, setDate] = useState(seed.date);
+
+  useEffect(() => {
+    const today = toLocalDateString();
+    if (draftIsEmpty({ amount, description, date }, today)) {
+      clearDraft(DRAFT_KEY);
+      return;
+    }
+    writeDraft(DRAFT_KEY, {
+      payPeriodId,
+      categoryId,
+      amount,
+      description,
+      date,
+    } satisfies StoredExpenseDraft);
+  }, [payPeriodId, categoryId, amount, description, date]);
+
+  function clear() {
+    const today = toLocalDateString();
+    setAmount("");
+    setDescription("");
+    setDate(today);
+    clearDraft(DRAFT_KEY);
+  }
+
+  return {
+    categoryId,
+    amount,
+    description,
+    date,
+    setCategoryId,
+    setAmount,
+    setDescription,
+    setDate,
+    clear,
+  };
 }
 
 export default function AddExpenseForm({
@@ -22,11 +115,19 @@ export default function AddExpenseForm({
   layout = "inline",
   onClose,
   autoFocusAmount = false,
+  draft,
 }: Props) {
-  const [categoryId, setCategoryId] = useState(categories[0]?.id || "");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [date, setDate] = useState(() => toLocalDateString());
+  const {
+    categoryId,
+    amount,
+    description,
+    date,
+    setCategoryId,
+    setAmount,
+    setDescription,
+    setDate,
+    clear,
+  } = draft;
   const [submitting, setSubmitting] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,8 +167,7 @@ export default function AddExpenseForm({
       return;
     }
 
-    setAmount("");
-    setDescription("");
+    clear();
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1500);
     await onAdded();

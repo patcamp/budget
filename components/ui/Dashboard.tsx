@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { togglePeriodLock, createPayPeriod, updatePeriodHours } from "@/components/api/dashboard";
 import { PayPeriod, Category, Expense, Profile, PaycheckConfig } from "@/lib/types";
-import AddExpenseForm from "./AddExpenseForm";
+import AddExpenseForm, { useExpenseDraft } from "./AddExpenseForm";
 import CategoryTile from "./CategoryTile";
 import PayPeriodPicker from "./PayPeriodPicker";
 import Statement from "./Statement";
@@ -56,6 +56,10 @@ export default function Dashboard({
   const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   const activePeriod = sortedPeriods.find((p) => p.id === selectedPeriodId) || null;
+  // Owned here (not inside each AddExpenseForm) so the desktop inline form and
+  // the mobile sheet share one draft — and sessionStorage can restore it after
+  // a remount when switching apps / tabs.
+  const expenseDraft = useExpenseDraft(activePeriod?.id ?? "", categories);
   const isHourly = paycheckConfig?.pay_type === "hourly";
   const dayHours = activePeriod?.day_hours ?? Number(paycheckConfig?.default_day_hours ?? 0);
   const nightHours = activePeriod?.night_hours ?? Number(paycheckConfig?.default_night_hours ?? 0);
@@ -327,6 +331,7 @@ export default function Dashboard({
                   payPeriodId={activePeriod.id}
                   categories={categories}
                   onAdded={onRefresh}
+                  draft={expenseDraft}
                 />
               </div>
             )}
@@ -524,6 +529,7 @@ export default function Dashboard({
                   payPeriodId={activePeriod.id}
                   categories={categories}
                   onAdded={onRefresh}
+                  draft={expenseDraft}
                   layout="stacked"
                   autoFocusAmount
                   onClose={() => setAddSheetOpen(false)}
