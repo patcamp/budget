@@ -18,8 +18,17 @@ function fmtDollar(n: number) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function fmtCompact(n: number) {
+  const rounded = Math.round(n);
+  return `$${rounded.toLocaleString()}`;
+}
+
 function fmtPct(n: number) {
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+}
+
+function fmtShares(n: number) {
+  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
 function fmtDate(ymd: string) {
@@ -27,8 +36,24 @@ function fmtDate(ymd: string) {
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function fmtDateShort(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function periodLabel(p: PayPeriod) {
-  return `${fmtDate(p.start_date)} – ${fmtDate(p.end_date)}`;
+  return `${fmtDateShort(p.start_date)} – ${fmtDateShort(p.end_date)}`;
+}
+
+function gainColor(n: number) {
+  return n >= 0 ? "var(--success-text)" : "var(--danger-text)";
+}
+
+/** Stable palette for account allocation chips — semantic distinction, not theme brand. */
+const ACCOUNT_COLORS = ["#3B82F6", "#22C55E", "#F59E0B", "#A855F7", "#06B6D4", "#F43F5E", "#84CC16", "#EAB308"];
+
+function accountColor(index: number) {
+  return ACCOUNT_COLORS[index % ACCOUNT_COLORS.length];
 }
 
 type EntryMode = "shares" | "dollars";
@@ -68,40 +93,223 @@ type Enriched = Investment & {
   returnPct: number;
 };
 
-function gainColor(n: number) {
-  return n >= 0 ? "var(--success-text)" : "var(--danger-text)";
+const inputStyle: React.CSSProperties = {
+  background: "var(--bg-page)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  color: "var(--text)",
+  fontSize: 14,
+  padding: "10px 12px",
+  outline: "none",
+  width: "100%",
+  boxSizing: "border-box",
+  minHeight: 44,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--text-muted)",
+  marginBottom: 6,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  fontWeight: 600,
+};
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <div style={labelStyle}>{children}</div>;
 }
 
-function HoldingCards({
-  holdings,
-  deletingId,
-  onDelete,
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 700,
+        color: "var(--text-faint)",
+        textTransform: "uppercase",
+        letterSpacing: "0.12em",
+        marginBottom: 12,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ModeToggle({
+  mode,
+  onChange,
 }: {
-  holdings: Enriched[];
-  deletingId: string | null;
-  onDelete: (id: string) => void;
+  mode: EntryMode;
+  onChange: (mode: EntryMode) => void;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {holdings.map((holding) => (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 0,
+        background: "var(--bg-page)",
+        border: "1px solid var(--border)",
+        borderRadius: 8,
+        overflow: "hidden",
+        maxWidth: 260,
+      }}
+    >
+      {([
+        ["dollars", "By dollars"],
+        ["shares", "By shares"],
+      ] as const).map(([value, label]) => {
+        const active = mode === value;
+        return (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onChange(value)}
+            style={{
+              padding: "10px 12px",
+              background: active ? "var(--accent-strong)" : "transparent",
+              border: "none",
+              color: active ? "var(--accent-text)" : "var(--text-muted)",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              minHeight: 40,
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function HoldingRow({
+  holding,
+  purchases,
+  periodById,
+  expanded,
+  onToggle,
+  deletingId,
+  deletingPurchaseId,
+  onDeleteHolding,
+  onDeletePurchase,
+}: {
+  holding: Enriched;
+  purchases: InvestmentPurchase[];
+  periodById: Map<string, PayPeriod>;
+  expanded: boolean;
+  onToggle: () => void;
+  deletingId: string | null;
+  deletingPurchaseId: string | null;
+  onDeleteHolding: (id: string) => void;
+  onDeletePurchase: (id: string) => void;
+}) {
+  const buys = purchases.filter((p) => p.investment_id === holding.id);
+
+  return (
+    <div
+      style={{
+        borderBottom: "1px solid var(--border-soft)",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="invest-holding-row"
+        style={{
+          width: "100%",
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)) 28px",
+          gap: 12,
+          alignItems: "center",
+          padding: "14px 4px",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          textAlign: "left",
+          color: "inherit",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 800, color: "var(--text)", fontSize: 15 }}>{holding.ticker}</span>
+            {holding.hasPrice && (
+              <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                {fmtDollar(holding.price)}{" "}
+                <span style={{ color: gainColor(holding.changePercent) }}>{fmtPct(holding.changePercent)}</span>
+              </span>
+            )}
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-faint)",
+              marginTop: 2,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {holding.quoteName !== holding.ticker ? holding.quoteName : `${fmtShares(Number(holding.shares))} shares`}
+            {holding.quoteName !== holding.ticker && (
+              <span> · {fmtShares(Number(holding.shares))} sh</span>
+            )}
+          </div>
+        </div>
+
+        <div className="invest-holding-metric">
+          <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Value
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
+            {holding.hasPrice ? fmtDollar(holding.value) : "—"}
+          </div>
+        </div>
+
+        <div className="invest-holding-metric">
+          <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Gain
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: gainColor(holding.gainLoss), marginTop: 2 }}>
+            {holding.hasPrice ? fmtDollar(holding.gainLoss) : "—"}
+          </div>
+        </div>
+
+        <div className="invest-holding-metric">
+          <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Return
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: gainColor(holding.returnPct), marginTop: 2 }}>
+            {holding.hasPrice ? fmtPct(holding.returnPct) : "—"}
+          </div>
+        </div>
+
         <div
-          key={holding.id}
           style={{
-            background: "var(--bg-page)",
-            border: "1px solid var(--border)",
-            borderRadius: 10,
-            padding: "14px 14px",
+            color: "var(--text-faint)",
+            fontSize: 18,
+            lineHeight: 1,
+            transform: expanded ? "rotate(90deg)" : "none",
+            transition: "transform 0.15s ease",
+            textAlign: "center",
           }}
+          aria-hidden
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-            <div>
-              <div style={{ fontWeight: 800, color: "var(--text)", fontSize: 16 }}>{holding.ticker}</div>
-              {holding.quoteName !== holding.ticker && (
-                <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>{holding.quoteName}</div>
-              )}
+          ›
+        </div>
+      </button>
+
+      {expanded && (
+        <div style={{ padding: "0 4px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              Avg cost {fmtDollar(Number(holding.cost_per_share))} · cost basis {fmtDollar(holding.costBasis)}
             </div>
             <button
-              onClick={() => onDelete(holding.id)}
+              type="button"
+              onClick={() => onDeleteHolding(holding.id)}
               disabled={deletingId === holding.id}
               className="tap-target"
               style={{
@@ -110,54 +318,74 @@ function HoldingCards({
                 borderRadius: 8,
                 color: "var(--danger-text)",
                 cursor: "pointer",
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 600,
                 padding: "8px 12px",
                 opacity: deletingId === holding.id ? 0.4 : 1,
-                minHeight: 44,
+                minHeight: 40,
               }}
             >
-              Remove
+              {deletingId === holding.id ? "Removing…" : "Remove holding"}
             </button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
-            <div>
-              <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Value</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
-                {holding.hasPrice ? fmtDollar(holding.value) : "—"}
-              </div>
+
+          {buys.length === 0 ? (
+            <div style={{ fontSize: 12, color: "var(--text-faint)", padding: "8px 0" }}>No purchase history.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {buys.map((buy) => {
+                const period = buy.pay_period_id ? periodById.get(buy.pay_period_id) : null;
+                return (
+                  <div
+                    key={buy.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      background: "var(--bg-page)",
+                      border: "1px solid var(--border-soft)",
+                      borderRadius: 8,
+                      padding: "10px 12px",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                        {fmtDollar(Number(buy.amount))} · {fmtShares(Number(buy.shares))} @ {fmtDollar(Number(buy.price_per_share))}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>
+                        {fmtDate(buy.purchased_at)}
+                        {period ? ` · ${periodLabel(period)}` : ""}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onDeletePurchase(buy.id)}
+                      disabled={deletingPurchaseId === buy.id}
+                      className="tap-target"
+                      style={{
+                        background: "transparent",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: "8px 12px",
+                        opacity: deletingPurchaseId === buy.id ? 0.4 : 1,
+                        minHeight: 40,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {deletingPurchaseId === buy.id ? "…" : "Undo"}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-            <div>
-              <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Gain / Loss</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: gainColor(holding.gainLoss) }}>
-                {holding.hasPrice ? fmtDollar(holding.gainLoss) : "—"}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Return</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: gainColor(holding.returnPct) }}>
-                {holding.hasPrice ? fmtPct(holding.returnPct) : "—"}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Price</div>
-              <div style={{ fontSize: 14, color: "var(--text-muted)" }}>
-                {holding.hasPrice ? (
-                  <>
-                    {fmtDollar(holding.price)}{" "}
-                    <span style={{ color: gainColor(holding.changePercent) }}>{fmtPct(holding.changePercent)}</span>
-                  </>
-                ) : (
-                  "—"
-                )}
-              </div>
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 10 }}>
-            {Number(holding.shares).toLocaleString("en-US", { maximumFractionDigits: 4 })} shares · avg {fmtDollar(Number(holding.cost_per_share))}
-          </div>
+          )}
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -179,6 +407,8 @@ export default function InvestmentPanel({
   const [deletingPurchaseId, setDeletingPurchaseId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [priceTouched, setPriceTouched] = useState(false);
+  const [logBuyOpen, setLogBuyOpen] = useState(investments.length === 0);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const tickers = useMemo(
     () => [...new Set(investments.map((i) => i.ticker.toUpperCase()))],
@@ -196,12 +426,6 @@ export default function InvestmentPanel({
     }
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [investments, paycheckConfig]);
-
-  const investmentById = useMemo(() => {
-    const map = new Map<string, Investment>();
-    for (const inv of investments) map.set(inv.id, inv);
-    return map;
-  }, [investments]);
 
   const periodById = useMemo(() => {
     const map = new Map<string, PayPeriod>();
@@ -292,6 +516,8 @@ export default function InvestmentPanel({
   const pricedCost = priced.reduce((s, i) => s + i.costBasis, 0);
   const totalGain = totalValue - pricedCost;
   const totalReturn = pricedCost > 0 ? (totalGain / pricedCost) * 100 : 0;
+  const hasPortfolio = investments.length > 0;
+  const heroPositive = totalGain >= 0;
 
   const byAccount = useMemo(() => {
     const map = new Map<string, Enriched[]>();
@@ -300,8 +526,17 @@ export default function InvestmentPanel({
       list.push(inv);
       map.set(inv.account, list);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return Array.from(map.entries())
+      .map(([account, holdings]) => {
+        const value = holdings.reduce((s, h) => s + (h.hasPrice ? h.value : h.costBasis), 0);
+        const cost = holdings.reduce((s, h) => s + h.costBasis, 0);
+        const gain = holdings.reduce((s, h) => s + (h.hasPrice ? h.gainLoss : 0), 0);
+        return { account, holdings, value, cost, gain };
+      })
+      .sort((a, b) => b.value - a.value || a.account.localeCompare(b.account));
   }, [enriched]);
+
+  const allocationTotal = byAccount.reduce((s, a) => s + a.value, 0) || 1;
 
   const periodContributed = useMemo(() => {
     if (!latestPeriodId) return 0;
@@ -309,6 +544,12 @@ export default function InvestmentPanel({
       .filter((p) => p.pay_period_id === latestPeriodId)
       .reduce((s, p) => s + Number(p.amount), 0);
   }, [purchases, latestPeriodId]);
+
+  const formQuote = quotes[form.ticker.trim().toUpperCase()];
+  const previewShares =
+    form.mode === "dollars" && parseFloat(form.dollars) > 0 && parseFloat(form.price_per_share) > 0
+      ? parseFloat(form.dollars) / parseFloat(form.price_per_share)
+      : null;
 
   async function handleLogBuy() {
     const ticker = form.ticker.trim().toUpperCase();
@@ -346,6 +587,7 @@ export default function InvestmentPanel({
     if (err) { setFormError(`Failed to log buy: ${err}`); return; }
     setForm(blankForm(form.pay_period_id || latestPeriodId));
     setPriceTouched(false);
+    setLogBuyOpen(false);
     await onRefresh();
   }
 
@@ -355,6 +597,7 @@ export default function InvestmentPanel({
     const err = await deleteInvestment(id);
     setDeletingId(null);
     if (err) { alert(`Failed to delete: ${err}`); return; }
+    if (expandedId === id) setExpandedId(null);
     await onRefresh();
   }
 
@@ -367,416 +610,496 @@ export default function InvestmentPanel({
     await onRefresh();
   }
 
-  const panelStyle: React.CSSProperties = { background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 };
-
-  const inputStyle: React.CSSProperties = {
-    background: "var(--bg-page)",
-    border: "1px solid var(--border)",
-    borderRadius: 7,
-    color: "var(--text)",
-    fontSize: 13,
-    padding: "10px 12px",
-    outline: "none",
-    width: "100%",
-    boxSizing: "border-box",
-  };
-
-  const modeBtn = (active: boolean): React.CSSProperties => ({
-    flex: 1,
-    padding: "8px 12px",
-    background: active ? "var(--accent-strong)" : "transparent",
-    border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-    borderRadius: 7,
-    color: active ? "var(--accent-text)" : "var(--text-muted)",
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: "pointer",
-    minHeight: 40,
-  });
-
   return (
-    <div style={{ padding: "16px 16px", paddingBottom: 80 }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Investments</div>
-        <div style={{ fontSize: 12, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          Log each buy · holdings roll up automatically · live prices via Yahoo Finance
+    <div style={{ minHeight: "100%", paddingBottom: 80 }}>
+      {/* HEADER */}
+      <div
+        style={{
+          background: "linear-gradient(160deg,var(--bg-panel) 0%,var(--bg-page) 100%)",
+          borderBottom: "1px solid var(--border)",
+          padding: "20px 16px 16px",
+        }}
+      >
+        <div style={{ fontSize: 10, letterSpacing: "0.18em", color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 6 }}>
+          Investments · Live quotes
+        </div>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.5px" }}>
+          Portfolio
+        </h1>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          Log each buy · holdings roll up by ticker + account
           {loadingQuotes && <span style={{ color: "var(--warning-text)" }}>· refreshing…</span>}
           {quotesError && <span style={{ color: "var(--danger-text)" }}>· {quotesError}</span>}
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 16 }}>
-        {[
-          { label: "Total Invested", val: fmtDollar(totalCost), color: "var(--text)" },
-          { label: "Market Value", val: fmtDollar(totalValue), color: "var(--text)" },
-          { label: "Gain / Loss", val: fmtDollar(totalGain), color: gainColor(totalGain) },
-          { label: "Return", val: fmtPct(totalReturn), color: gainColor(totalReturn) },
-          ...(latestPeriodId
-            ? [{ label: "This Period Buys", val: fmtDollar(periodContributed), color: "var(--text)" }]
-            : []),
-        ].map((c) => (
-          <div key={c.label} style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px" }}>
-            <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>{c.label}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: c.color }}>
-              {c.label === "This Period Buys" ? c.val : investments.length ? c.val : "—"}
+      <div style={{ padding: "16px 16px 0" }}>
+        {/* PORTFOLIO HERO */}
+        <div
+          style={{
+            background: hasPortfolio
+              ? heroPositive
+                ? "var(--success-bg)"
+                : "var(--danger-bg)"
+              : "var(--bg-panel)",
+            border: `1px solid ${
+              hasPortfolio
+                ? heroPositive
+                  ? "var(--success-border)"
+                  : "var(--danger-border)"
+                : "var(--border)"
+            }`,
+            borderRadius: 14,
+            padding: "18px 18px 16px",
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "var(--text-faint)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  marginBottom: 6,
+                }}
+              >
+                Market value
+              </div>
+              <div
+                style={{
+                  fontSize: 32,
+                  fontWeight: 800,
+                  color: "var(--text)",
+                  letterSpacing: "-0.8px",
+                  lineHeight: 1.1,
+                }}
+              >
+                {hasPortfolio ? fmtCompact(totalValue || totalCost) : "—"}
+              </div>
+              {hasPortfolio ? (
+                <div style={{ fontSize: 13, marginTop: 8, color: gainColor(totalGain) }}>
+                  {fmtDollar(totalGain)} ({fmtPct(totalReturn)})
+                  <span style={{ color: "var(--text-faint)" }}> · {fmtDollar(totalCost)} invested</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, marginTop: 8, color: "var(--text-muted)" }}>
+                  Log your first buy to start tracking
+                </div>
+              )}
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Log a buy — primary action for recurring contributions */}
-      <div style={{ ...panelStyle, marginBottom: 16, padding: 16 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>
-          Log a Buy
-        </div>
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 14, maxWidth: 280 }}>
-          <button type="button" style={modeBtn(form.mode === "dollars")} onClick={() => setForm((f) => ({ ...f, mode: "dollars" }))}>
-            By dollars
-          </button>
-          <button type="button" style={modeBtn(form.mode === "shares")} onClick={() => setForm((f) => ({ ...f, mode: "shares" }))}>
-            By shares
-          </button>
-        </div>
-
-        <div className="invest-add-grid" style={{ display: "grid", gridTemplateColumns: "100px 1fr 120px 120px", gap: 10, alignItems: "end" }}>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>TICKER</div>
-            <input
-              style={{ ...inputStyle, textTransform: "uppercase" }}
-              placeholder="VOO"
-              value={form.ticker}
-              onChange={(e) => {
-                setPriceTouched(false);
-                setForm((f) => ({ ...f, ticker: e.target.value }));
+            <button
+              type="button"
+              onClick={() => setLogBuyOpen((o) => !o)}
+              style={{
+                padding: "10px 14px",
+                background: "var(--accent-strong)",
+                border: "1px solid var(--accent)",
+                borderRadius: 8,
+                color: "var(--accent-text)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                minHeight: 44,
+                flexShrink: 0,
               }}
-              onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
-            />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>ACCOUNT</div>
-            <input
-              style={inputStyle}
-              list="invest-account-suggestions"
-              placeholder="Roth 401k"
-              value={form.account}
-              onChange={(e) => setForm((f) => ({ ...f, account: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
-            />
-            <datalist id="invest-account-suggestions">
-              {accountSuggestions.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          </div>
-          {form.mode === "dollars" ? (
-            <div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>DOLLARS</div>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                style={inputStyle}
-                placeholder="500.00"
-                value={form.dollars}
-                onChange={(e) => setForm((f) => ({ ...f, dollars: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
-              />
-            </div>
-          ) : (
-            <div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>SHARES</div>
-              <input
-                type="number"
-                step="0.0001"
-                min="0"
-                style={inputStyle}
-                placeholder="10"
-                value={form.shares}
-                onChange={(e) => setForm((f) => ({ ...f, shares: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
-              />
-            </div>
-          )}
-          <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>PRICE / SHARE</div>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              style={inputStyle}
-              placeholder="450.00"
-              value={form.price_per_share}
-              onChange={(e) => {
-                setPriceTouched(true);
-                setForm((f) => ({ ...f, price_per_share: e.target.value }));
-              }}
-              onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
-            />
-          </div>
-        </div>
-
-        <div className="invest-buy-meta" style={{ display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 10, alignItems: "end", marginTop: 12 }}>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>DATE</div>
-            <input
-              type="date"
-              style={inputStyle}
-              value={form.purchased_at}
-              onChange={(e) => setForm((f) => ({ ...f, purchased_at: e.target.value }))}
-            />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, letterSpacing: "0.06em" }}>PAY PERIOD</div>
-            <select
-              style={inputStyle}
-              value={form.pay_period_id}
-              onChange={(e) => setForm((f) => ({ ...f, pay_period_id: e.target.value }))}
             >
-              <option value="">None</option>
-              {[...payPeriods].reverse().map((p) => (
-                <option key={p.id} value={p.id}>
-                  {periodLabel(p)}
-                  {p.id === latestPeriodId ? " (current)" : ""}
-                </option>
-              ))}
-            </select>
+              {logBuyOpen ? "Close" : "Log a buy"}
+            </button>
           </div>
-          <button
-            onClick={handleLogBuy}
-            disabled={adding}
+        </div>
+
+        {/* METRICS */}
+        <div className="metric-grid" style={{ marginBottom: 16 }}>
+          <div className="metric-card">
+            <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
+              Invested
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
+              {hasPortfolio ? fmtCompact(totalCost) : "—"}
+            </div>
+            <div className="metric-card-sub">
+              {hasPortfolio ? `${investments.length} holding${investments.length === 1 ? "" : "s"}` : " "}
+            </div>
+          </div>
+          <div className="metric-card">
+            <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
+              This Period
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
+              {latestPeriodId ? fmtCompact(periodContributed) : "—"}
+            </div>
+            <div className="metric-card-sub">Buys linked to current period</div>
+          </div>
+          <div className="metric-card">
+            <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
+              Return
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: hasPortfolio ? gainColor(totalReturn) : "var(--text)" }}>
+              {hasPortfolio && priced.length ? fmtPct(totalReturn) : "—"}
+            </div>
+            <div className="metric-card-sub">
+              {hasPortfolio && priced.length ? fmtDollar(totalGain) : " "}
+            </div>
+          </div>
+        </div>
+
+        {/* LOG A BUY */}
+        {logBuyOpen && (
+          <div
             style={{
-              padding: "10px 18px",
-              background: "var(--accent-strong)",
-              border: "1px solid var(--accent)",
-              borderRadius: 8,
-              color: "var(--accent-text)",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: adding ? "wait" : "pointer",
-              opacity: adding ? 0.6 : 1,
-              whiteSpace: "nowrap",
-              minHeight: 44,
+              background: "var(--bg-panel)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 16,
             }}
           >
-            {adding ? "Logging…" : "Log buy"}
-          </button>
-        </div>
+            <SectionTitle>Log a buy</SectionTitle>
 
-        {form.mode === "dollars" && parseFloat(form.dollars) > 0 && parseFloat(form.price_per_share) > 0 && (
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10 }}>
-            ≈ {(parseFloat(form.dollars) / parseFloat(form.price_per_share)).toLocaleString("en-US", { maximumFractionDigits: 4 })} shares
-          </div>
-        )}
-        {formError && (
-          <div style={{ marginTop: 10, fontSize: 12, color: "var(--danger-text)" }}>{formError}</div>
-        )}
-        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 10 }}>
-          Same ticker + account merges into one holding (weighted avg cost). Price prefills from Yahoo when available.
-        </div>
-      </div>
-
-      {investments.length > 0 && (
-        <>
-          {byAccount.length > 1 && (
-            <div style={{ ...panelStyle, marginBottom: 16, padding: 16 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12 }}>By Account</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
-                {byAccount.map(([account, holdings]) => {
-                  const acctValue = holdings.reduce((s, h) => s + h.value, 0);
-                  const acctCost = holdings.reduce((s, h) => s + h.costBasis, 0);
-                  const acctGain = acctValue - acctCost;
-                  return (
-                    <div key={account} style={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px" }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>{account}</div>
-                      <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>{fmtDollar(acctValue)}</div>
-                      <div style={{ fontSize: 11, color: gainColor(acctGain) }}>
-                        {fmtDollar(acctGain)} {acctCost > 0 ? `(${fmtPct((acctGain / acctCost) * 100)})` : ""}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            <div style={{ marginBottom: 14 }}>
+              <ModeToggle mode={form.mode} onChange={(mode) => setForm((f) => ({ ...f, mode }))} />
             </div>
-          )}
 
-          {byAccount.map(([account, holdings]) => (
-            <div key={account} style={{ ...panelStyle, marginBottom: 16, padding: 16 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>
-                {account}
+            <div className="invest-form-grid">
+              <div>
+                <FieldLabel>Ticker</FieldLabel>
+                <input
+                  style={{ ...inputStyle, textTransform: "uppercase" }}
+                  placeholder="VOO"
+                  value={form.ticker}
+                  autoFocus
+                  onChange={(e) => {
+                    setPriceTouched(false);
+                    setForm((f) => ({ ...f, ticker: e.target.value }));
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+                />
+                {formQuote?.ok && formQuote.name && (
+                  <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4 }}>
+                    {formQuote.name}
+                    {formQuote.price > 0 ? ` · ${fmtDollar(formQuote.price)}` : ""}
+                  </div>
+                )}
               </div>
 
-              <div className="hide-mobile">
-                <div className="scroll-x">
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                        {["Ticker", "Shares", "Avg Cost", "Price", "Value", "Gain / Loss", "Return", ""].map((h) => (
-                          <th key={h} style={{ textAlign: h === "" ? "center" : "right", padding: "0 10px 10px", fontSize: 10, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
-                            {h === "Ticker" ? <span style={{ textAlign: "left", display: "block" }}>{h}</span> : h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {holdings.map((holding) => (
-                        <tr key={holding.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
-                          <td style={{ padding: "10px 10px" }}>
-                            <div style={{ fontWeight: 700, color: "var(--text)" }}>{holding.ticker}</div>
-                            <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 1, whiteSpace: "nowrap", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {holding.quoteName !== holding.ticker ? holding.quoteName : ""}
-                            </div>
-                          </td>
-                          <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text-muted)" }}>{Number(holding.shares).toLocaleString("en-US", { maximumFractionDigits: 4 })}</td>
-                          <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text-muted)" }}>{fmtDollar(Number(holding.cost_per_share))}</td>
-                          <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text)", whiteSpace: "nowrap" }}>
-                            {holding.hasPrice ? (
-                              <>
-                                {fmtDollar(holding.price)}
-                                <span style={{ display: "block", fontSize: 10, color: gainColor(holding.changePercent) }}>{fmtPct(holding.changePercent)} today</span>
-                              </>
-                            ) : (
-                              <span style={{ color: "var(--text-faint)" }}>—</span>
-                            )}
-                          </td>
-                          <td style={{ textAlign: "right", padding: "10px 10px", fontWeight: 600, color: "var(--text)" }}>
-                            {holding.hasPrice ? fmtDollar(holding.value) : "—"}
-                          </td>
-                          <td style={{ textAlign: "right", padding: "10px 10px", color: gainColor(holding.gainLoss), fontWeight: 600 }}>
-                            {holding.hasPrice ? fmtDollar(holding.gainLoss) : "—"}
-                          </td>
-                          <td style={{ textAlign: "right", padding: "10px 10px", color: gainColor(holding.returnPct) }}>
-                            {holding.hasPrice ? fmtPct(holding.returnPct) : "—"}
-                          </td>
-                          <td style={{ textAlign: "center", padding: "10px 6px" }}>
-                            <button
-                              onClick={() => handleDeleteHolding(holding.id)}
-                              disabled={deletingId === holding.id}
-                              style={{ background: "transparent", border: "none", color: "#7F1D1D", cursor: "pointer", fontSize: 14, padding: "8px 10px", opacity: deletingId === holding.id ? 0.4 : 1, minWidth: 44, minHeight: 44 }}
-                              title="Remove holding"
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <div>
+                <FieldLabel>Account</FieldLabel>
+                <input
+                  style={inputStyle}
+                  list="invest-account-suggestions"
+                  placeholder="Roth 401k"
+                  value={form.account}
+                  onChange={(e) => setForm((f) => ({ ...f, account: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+                />
+                <datalist id="invest-account-suggestions">
+                  {accountSuggestions.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+              </div>
+
+              {form.mode === "dollars" ? (
+                <div>
+                  <FieldLabel>Dollars</FieldLabel>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    style={inputStyle}
+                    placeholder="500.00"
+                    value={form.dollars}
+                    onChange={(e) => setForm((f) => ({ ...f, dollars: e.target.value }))}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+                  />
                 </div>
+              ) : (
+                <div>
+                  <FieldLabel>Shares</FieldLabel>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    style={inputStyle}
+                    placeholder="10"
+                    value={form.shares}
+                    onChange={(e) => setForm((f) => ({ ...f, shares: e.target.value }))}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+                  />
+                </div>
+              )}
+
+              <div>
+                <FieldLabel>Price / share</FieldLabel>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  style={inputStyle}
+                  placeholder="450.00"
+                  value={form.price_per_share}
+                  onChange={(e) => {
+                    setPriceTouched(true);
+                    setForm((f) => ({ ...f, price_per_share: e.target.value }));
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleLogBuy()}
+                />
               </div>
 
-              <div className="show-mobile">
-                <HoldingCards holdings={holdings} deletingId={deletingId} onDelete={handleDeleteHolding} />
+              <div>
+                <FieldLabel>Date</FieldLabel>
+                <input
+                  type="date"
+                  style={inputStyle}
+                  value={form.purchased_at}
+                  onChange={(e) => setForm((f) => ({ ...f, purchased_at: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <FieldLabel>Pay period</FieldLabel>
+                <select
+                  style={inputStyle}
+                  value={form.pay_period_id}
+                  onChange={(e) => setForm((f) => ({ ...f, pay_period_id: e.target.value }))}
+                >
+                  <option value="">None</option>
+                  {[...payPeriods].reverse().map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {periodLabel(p)}
+                      {p.id === latestPeriodId ? " (current)" : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          ))}
-        </>
-      )}
 
-      {investments.length === 0 && (
-        <div style={{ ...panelStyle, textAlign: "center", color: "var(--text-faint)", fontSize: 13, marginBottom: 16, padding: 20 }}>
-          No holdings yet. Log your first buy above — each paycheck contribution becomes another buy against the same ticker.
-        </div>
-      )}
+            {previewShares != null && (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 12 }}>
+                ≈ {fmtShares(previewShares)} shares
+              </div>
+            )}
 
-      {purchases.length > 0 && (
-        <div style={{ ...panelStyle, padding: 16 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 14 }}>
-            Purchase History
-          </div>
+            {formError && (
+              <div style={{ marginTop: 10, fontSize: 12, color: "var(--danger-text)" }}>{formError}</div>
+            )}
 
-          <div className="hide-mobile">
-            <div className="scroll-x">
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                    {["Date", "Ticker", "Account", "Shares", "Price", "Amount", "Period", ""].map((h) => (
-                      <th key={h} style={{ textAlign: h === "" ? "center" : h === "Date" || h === "Ticker" || h === "Account" || h === "Period" ? "left" : "right", padding: "0 10px 10px", fontSize: 10, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {purchases.map((buy) => {
-                    const holding = investmentById.get(buy.investment_id);
-                    const period = buy.pay_period_id ? periodById.get(buy.pay_period_id) : null;
-                    return (
-                      <tr key={buy.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
-                        <td style={{ padding: "10px 10px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtDate(buy.purchased_at)}</td>
-                        <td style={{ padding: "10px 10px", fontWeight: 700, color: "var(--text)" }}>{holding?.ticker ?? "—"}</td>
-                        <td style={{ padding: "10px 10px", color: "var(--text-muted)" }}>{holding?.account ?? "—"}</td>
-                        <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text-muted)" }}>
-                          {Number(buy.shares).toLocaleString("en-US", { maximumFractionDigits: 4 })}
-                        </td>
-                        <td style={{ textAlign: "right", padding: "10px 10px", color: "var(--text-muted)" }}>{fmtDollar(Number(buy.price_per_share))}</td>
-                        <td style={{ textAlign: "right", padding: "10px 10px", fontWeight: 600, color: "var(--text)" }}>{fmtDollar(Number(buy.amount))}</td>
-                        <td style={{ padding: "10px 10px", color: "var(--text-faint)", fontSize: 12 }}>
-                          {period ? periodLabel(period) : "—"}
-                        </td>
-                        <td style={{ textAlign: "center", padding: "10px 6px" }}>
-                          <button
-                            onClick={() => handleDeletePurchase(buy.id)}
-                            disabled={deletingPurchaseId === buy.id}
-                            style={{ background: "transparent", border: "none", color: "#7F1D1D", cursor: "pointer", fontSize: 14, padding: "8px 10px", opacity: deletingPurchaseId === buy.id ? 0.4 : 1, minWidth: 44, minHeight: 44 }}
-                            title="Undo buy"
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={handleLogBuy}
+                disabled={adding}
+                style={{
+                  padding: "10px 18px",
+                  background: "var(--accent-strong)",
+                  border: "1px solid var(--accent)",
+                  borderRadius: 8,
+                  color: "var(--accent-text)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: adding ? "wait" : "pointer",
+                  opacity: adding ? 0.6 : 1,
+                  minHeight: 44,
+                }}
+              >
+                {adding ? "Logging…" : "Log buy"}
+              </button>
+              {hasPortfolio && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLogBuyOpen(false);
+                    setFormError(null);
+                  }}
+                  style={{
+                    padding: "10px 18px",
+                    background: "transparent",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    color: "var(--text-muted)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    minHeight: 44,
+                  }}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+
+            <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 12 }}>
+              Same ticker + account merges into one holding (weighted avg cost). Price prefills from Yahoo when available.
             </div>
           </div>
+        )}
 
-          <div className="show-mobile" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {purchases.map((buy) => {
-              const holding = investmentById.get(buy.investment_id);
-              const period = buy.pay_period_id ? periodById.get(buy.pay_period_id) : null;
-              return (
-                <div key={buy.id} style={{ background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 10, padding: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-                    <div>
-                      <div style={{ fontWeight: 700, color: "var(--text)" }}>
-                        {holding?.ticker ?? "—"} · {fmtDollar(Number(buy.amount))}
-                      </div>
-                      <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>
-                        {fmtDate(buy.purchased_at)} · {Number(buy.shares).toLocaleString("en-US", { maximumFractionDigits: 4 })} @ {fmtDollar(Number(buy.price_per_share))}
-                      </div>
-                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                        {holding?.account ?? "—"}
-                        {period ? ` · ${periodLabel(period)}` : ""}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeletePurchase(buy.id)}
-                      disabled={deletingPurchaseId === buy.id}
-                      className="tap-target"
+        {/* ALLOCATION */}
+        {byAccount.length > 0 && (
+          <div
+            style={{
+              background: "var(--bg-panel)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 16,
+            }}
+          >
+            <SectionTitle>By account</SectionTitle>
+            <div
+              style={{
+                display: "flex",
+                height: 10,
+                borderRadius: 999,
+                overflow: "hidden",
+                background: "var(--border-soft)",
+                marginBottom: 14,
+              }}
+            >
+              {byAccount.map((acct, i) => (
+                <div
+                  key={acct.account}
+                  title={`${acct.account}: ${fmtDollar(acct.value)}`}
+                  style={{
+                    width: `${(acct.value / allocationTotal) * 100}%`,
+                    background: accountColor(i),
+                    minWidth: acct.value > 0 ? 4 : 0,
+                  }}
+                />
+              ))}
+            </div>
+            <div className="invest-account-grid">
+              {byAccount.map((acct, i) => (
+                <div
+                  key={acct.account}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 10,
+                    minWidth: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: accountColor(i),
+                      marginTop: 5,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div
                       style={{
-                        background: "transparent",
-                        border: "1px solid var(--danger-border)",
-                        borderRadius: 8,
-                        color: "var(--danger-text)",
-                        cursor: "pointer",
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: 600,
-                        padding: "8px 12px",
-                        opacity: deletingPurchaseId === buy.id ? 0.4 : 1,
-                        minHeight: 44,
+                        color: "var(--text-secondary)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
                       }}
                     >
-                      Undo
-                    </button>
+                      {acct.account}
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
+                      {fmtDollar(acct.value)}
+                    </div>
+                    <div style={{ fontSize: 11, color: gainColor(acct.gain), marginTop: 2 }}>
+                      {fmtDollar(acct.gain)}
+                      {acct.cost > 0 ? ` (${fmtPct((acct.gain / acct.cost) * 100)})` : ""}
+                    </div>
                   </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* HOLDINGS */}
+        {hasPortfolio ? (
+          byAccount.map((acct) => (
+            <div
+              key={acct.account}
+              style={{
+                background: "var(--bg-panel)",
+                border: "1px solid var(--border)",
+                borderRadius: 14,
+                padding: "12px 14px 4px",
+                marginBottom: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: 12,
+                  marginBottom: 4,
+                  padding: "4px 4px 8px",
+                  borderBottom: "1px solid var(--border-soft)",
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{acct.account}</div>
+                <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                  {fmtDollar(acct.value)}
+                  <span style={{ color: gainColor(acct.gain) }}> · {fmtDollar(acct.gain)}</span>
+                </div>
+              </div>
+
+              {acct.holdings.map((holding) => (
+                <HoldingRow
+                  key={holding.id}
+                  holding={holding}
+                  purchases={purchases}
+                  periodById={periodById}
+                  expanded={expandedId === holding.id}
+                  onToggle={() => setExpandedId((id) => (id === holding.id ? null : holding.id))}
+                  deletingId={deletingId}
+                  deletingPurchaseId={deletingPurchaseId}
+                  onDeleteHolding={handleDeleteHolding}
+                  onDeletePurchase={handleDeletePurchase}
+                />
+              ))}
+            </div>
+          ))
+        ) : (
+          !logBuyOpen && (
+            <div
+              style={{
+                background: "var(--bg-panel)",
+                border: "1px dashed var(--border-strong)",
+                borderRadius: 14,
+                padding: 28,
+                textAlign: "center",
+                color: "var(--text-muted)",
+                fontSize: 13,
+              }}
+            >
+              No holdings yet.{" "}
+              <button
+                type="button"
+                onClick={() => setLogBuyOpen(true)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--accent-link)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontSize: 13,
+                  padding: 0,
+                }}
+              >
+                Log your first buy
+              </button>
+            </div>
+          )
+        )}
+      </div>
     </div>
   );
 }
