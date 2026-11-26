@@ -2,7 +2,7 @@
 
 Multi-user budget dashboard. Tracks spending per semi-monthly pay period, with the ability to lock a period so historical data can't be accidentally edited. Users sign in with Supabase Auth (email/password); every table is scoped per-user by `auth.uid()` RLS policies — the database, not the UI, is the data-protection layer.
 
-Stack: **Next.js 14 (App Router) + TypeScript + Supabase (incl. Supabase Auth) + Recharts**, deployed on Vercel. No ORM/migration tool; the only tests are vitest unit tests for the pure paycheck math in `lib/paycheck.ts` — see sub-directory CLAUDE.md files for specifics.
+Stack: **Next.js 14 (App Router) + TypeScript + Supabase (incl. Supabase Auth) + Recharts**, deployed on Vercel. No ORM/migration tool; unit tests (vitest) cover pure helpers in `lib/` (`paycheck.ts`, `dates.ts`, `draftStorage.ts`, `pace.ts`, `csv.ts`) — see sub-directory CLAUDE.md files for specifics.
 
 ## Commands
 
@@ -11,7 +11,7 @@ npm run dev     # local dev server, http://localhost:3000
 npm run build
 npm run start
 npm run lint
-npm test        # vitest — currently covers lib/paycheck.ts only
+npm test        # vitest — covers lib/ pure helpers
 ```
 
 ## Environment
@@ -21,7 +21,7 @@ Requires `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env
 ## Architecture
 
 - `app/` — Next.js App Router entry point. `(app)/layout.tsx` fetches all data on mount via `loadPageData()` and owns the top-level tab navigation (This Period / Overview / Investments / Admin) as real routes (`/`, `/overview`, `/investments`, `/admin`). See [app/CLAUDE.md](app/CLAUDE.md).
-- `components/api/` — all Supabase calls, no JSX. Each file owns one domain: `data.ts` (page load), `auth.ts` (sign in/up/out, session, profile), `onboarding.ts` (first-login seed for new accounts), `dashboard.ts` (lock/create period), `expenses.ts`, `investments.ts` (log buy / undo purchase / delete holding), `periods.ts` (admin edit/delete), `categories.ts` (admin CRUD), `admin.ts` (paycheck config).
+- `components/api/` — all Supabase calls, no JSX. Each file owns one domain: `data.ts` (page load), `auth.ts` (sign in/up/out, session, profile), `onboarding.ts` (first-login seed for new accounts), `dashboard.ts` (lock/create period + auto-insert recurring expenses), `expenses.ts` (single & bulk CSV insert/edit/delete), `recurring.ts` (recurring expense template CRUD), `investments.ts` (log buy / undo purchase / delete holding), `periods.ts` (admin edit/delete), `categories.ts` (admin CRUD), `admin.ts` (paycheck config).
 - `components/ui/` — all client components (`"use client"`), no direct Supabase imports. See [components/CLAUDE.md](components/CLAUDE.md).
 - `lib/` — Supabase client singleton + TypeScript types mirroring the DB schema. See [lib/CLAUDE.md](lib/CLAUDE.md).
 - `app/api/quotes/route.ts` — server-side route that proxies Yahoo Finance price lookups for the Investments tab (avoids CORS, keeps yahoo-finance2 server-only).
@@ -31,7 +31,7 @@ Requires `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env
 
 `app/(app)/layout.tsx` gates everything on a Supabase Auth session (`getSession()` + `onAuthChange`): no session renders `AuthScreen` (login/register), a session renders the tab UI with a sign-out header and `{children}` (the matched route page). The session lives in localStorage via supabase-js, so all data fetching stays client-side — no server components or middleware. RLS scopes every query/mutation to the signed-in user automatically; `user_id` columns default to `auth.uid()` so insert payloads never send it.
 
-Once signed in, the layout calls `loadPageData()`, which fires 7 parallel Supabase queries (`pay_periods`, `categories`, `expenses`, `paycheck_config`, `investments`, `investment_purchases`, `profiles`) and returns them as a single object. If the account has no categories and no paycheck config (fresh registration), `setupNewUser()` seeds starter categories, a paycheck config from the salary captured at signup, and a first pay period, then refetches. All data is held in `useState` in the layout and exposed to route pages via a `useBudgetData()` context hook — each of `app/(app)/page.tsx`, `overview/page.tsx`, `investments/page.tsx`, `admin/page.tsx` reads what it needs and renders the corresponding tab component. Any mutation anywhere in the tree calls `onRefresh` (wired to `loadAll`) to trigger a full refetch — no optimistic UI, no realtime subscriptions, no local cache patching.
+Once signed in, the layout calls `loadPageData()`, which fires 8 parallel Supabase queries (`pay_periods`, `categories`, `expenses`, `paycheck_config`, `investments`, `investment_purchases`, `recurring_expenses`, `profiles`) and returns them as a single object. If the account has no categories and no paycheck config (fresh registration), `setupNewUser()` seeds starter categories, a paycheck config from the salary captured at signup, and a first pay period, then refetches. All data is held in `useState` in the layout and exposed to route pages via a `useBudgetData()` context hook (wrapped in `ToastProvider` for non-blocking notifications) — each of `app/(app)/page.tsx`, `overview/page.tsx`, `investments/page.tsx`, `admin/page.tsx` reads what it needs and renders the corresponding tab component. Any mutation anywhere in the tree calls `onRefresh` (wired to `loadAll`) to trigger a full refetch — no optimistic UI, no realtime subscriptions, no local cache patching.
 
 The This Period and Overview routes additionally sync their filter state to the URL query string (`?period=&category=` and `?periods=`, respectively) via `useSearchParams`/`router.replace`, so filters are shareable/bookmarkable and survive a refresh; both default sensibly (latest period + all categories; all periods selected) when the params are absent.
 
