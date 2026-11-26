@@ -481,3 +481,51 @@ create index if not exists investment_purchases_user_purchased_at
 
 create index if not exists investment_purchases_investment
   on investment_purchases (investment_id);
+
+-- ============================================================
+-- RECURRING EXPENSES (2026-11-26)
+-- Per-period fixed/recurring expense templates. When a new pay
+-- period is created, active templates are auto-inserted as normal
+-- rows in `expenses` (so they can be edited/deleted freely).
+-- Run in Supabase SQL Editor on existing projects.
+-- ============================================================
+create table if not exists recurring_expenses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  category_id uuid not null references categories(id) on delete cascade,
+  description text not null,
+  amount numeric(10,2) not null check (amount > 0),
+  day_offset int not null default 0 check (day_offset >= 0 and day_offset <= 31),
+  active boolean not null default true,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table recurring_expenses enable row level security;
+
+drop policy if exists "Own rows" on recurring_expenses;
+create policy "Own rows" on recurring_expenses
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists recurring_expenses_user_sort
+  on recurring_expenses (user_id, sort_order, created_at);
+
+create or replace function public.enforce_recurring_expense_ownership() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  category_owner uuid;
+begin
+  select user_id into category_owner from categories where id = new.category_id;
+  if category_owner is null then
+    raise exception 'Category not found';
+  end if;
+  if category_owner is distinct from auth.uid() then
+    raise exception 'Category does not belong to the current user';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists enforce_recurring_expense_ownership on recurring_expenses;
+create trigger enforce_recurring_expense_ownership
+  before insert or update of category_id on recurring_expenses
+  for each row execute function public.enforce_recurring_expense_ownership();

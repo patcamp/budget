@@ -5,6 +5,7 @@ import { logInvestmentBuy, deleteInvestment, deleteInvestmentPurchase } from "@/
 import { fetchQuotes, QuoteResult } from "@/components/api/quotes";
 import { toLocalDateString } from "@/lib/dates";
 import { Investment, InvestmentPurchase, PayPeriod, PaycheckConfig } from "@/lib/types";
+import { useToast } from "./Toast";
 
 interface Props {
   investments: Investment[];
@@ -166,6 +167,7 @@ function ModeToggle({
             key={value}
             type="button"
             onClick={() => onChange(value)}
+            className="tap-target"
             style={{
               padding: "10px 12px",
               background: active ? "var(--accent-strong)" : "transparent",
@@ -174,7 +176,7 @@ function ModeToggle({
               fontSize: 13,
               fontWeight: 600,
               cursor: "pointer",
-              minHeight: 40,
+              minHeight: 44,
             }}
           >
             {label}
@@ -189,6 +191,7 @@ function HoldingRow({
   holding,
   purchases,
   periodById,
+  loadingQuotes,
   expanded,
   onToggle,
   deletingId,
@@ -199,6 +202,7 @@ function HoldingRow({
   holding: Enriched;
   purchases: InvestmentPurchase[];
   periodById: Map<string, PayPeriod>;
+  loadingQuotes: boolean;
   expanded: boolean;
   onToggle: () => void;
   deletingId: string | null;
@@ -264,7 +268,13 @@ function HoldingRow({
             Value
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
-            {holding.hasPrice ? fmtDollar(holding.value) : "—"}
+            {holding.hasPrice ? (
+              fmtDollar(holding.value)
+            ) : loadingQuotes ? (
+              <span className="skeleton-block" style={{ display: "inline-block", width: 64, height: 14, borderRadius: 4 }} />
+            ) : (
+              "—"
+            )}
           </div>
         </div>
 
@@ -273,7 +283,13 @@ function HoldingRow({
             Gain
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: gainColor(holding.gainLoss), marginTop: 2 }}>
-            {holding.hasPrice ? fmtDollar(holding.gainLoss) : "—"}
+            {holding.hasPrice ? (
+              fmtDollar(holding.gainLoss)
+            ) : loadingQuotes ? (
+              <span className="skeleton-block" style={{ display: "inline-block", width: 56, height: 14, borderRadius: 4 }} />
+            ) : (
+              "—"
+            )}
           </div>
         </div>
 
@@ -282,7 +298,13 @@ function HoldingRow({
             Return
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, color: gainColor(holding.returnPct), marginTop: 2 }}>
-            {holding.hasPrice ? fmtPct(holding.returnPct) : "—"}
+            {holding.hasPrice ? (
+              fmtPct(holding.returnPct)
+            ) : loadingQuotes ? (
+              <span className="skeleton-block" style={{ display: "inline-block", width: 48, height: 14, borderRadius: 4 }} />
+            ) : (
+              "—"
+            )}
           </div>
         </div>
 
@@ -397,6 +419,7 @@ export default function InvestmentPanel({
   paycheckConfig,
   onRefresh,
 }: Props) {
+  const toast = useToast();
   const latestPeriodId = payPeriods.length ? payPeriods[payPeriods.length - 1].id : "";
   const [quotes, setQuotes] = useState<Record<string, QuoteResult>>({});
   const [loadingQuotes, setLoadingQuotes] = useState(false);
@@ -584,10 +607,15 @@ export default function InvestmentPanel({
     });
 
     setAdding(false);
-    if (err) { setFormError(`Failed to log buy: ${err}`); return; }
+    if (err) {
+      setFormError(`Failed to log buy: ${err}`);
+      toast.error(`Failed to log buy: ${err}`);
+      return;
+    }
     setForm(blankForm(form.pay_period_id || latestPeriodId));
     setPriceTouched(false);
     setLogBuyOpen(false);
+    toast.success(`Logged buy for ${ticker}.`);
     await onRefresh();
   }
 
@@ -596,8 +624,9 @@ export default function InvestmentPanel({
     setDeletingId(id);
     const err = await deleteInvestment(id);
     setDeletingId(null);
-    if (err) { alert(`Failed to delete: ${err}`); return; }
+    if (err) { toast.error(`Failed to delete holding: ${err}`); return; }
     if (expandedId === id) setExpandedId(null);
+    toast.success("Holding removed.");
     await onRefresh();
   }
 
@@ -606,7 +635,8 @@ export default function InvestmentPanel({
     setDeletingPurchaseId(id);
     const err = await deleteInvestmentPurchase(id);
     setDeletingPurchaseId(null);
-    if (err) { alert(`Failed to undo buy: ${err}`); return; }
+    if (err) { toast.error(`Failed to undo buy: ${err}`); return; }
+    toast.success("Purchase undone.");
     await onRefresh();
   }
 
@@ -1057,6 +1087,7 @@ export default function InvestmentPanel({
                   holding={holding}
                   purchases={purchases}
                   periodById={periodById}
+                  loadingQuotes={loadingQuotes}
                   expanded={expandedId === holding.id}
                   onToggle={() => setExpandedId((id) => (id === holding.id ? null : holding.id))}
                   deletingId={deletingId}
@@ -1076,25 +1107,31 @@ export default function InvestmentPanel({
                 borderRadius: 14,
                 padding: 28,
                 textAlign: "center",
-                color: "var(--text-muted)",
-                fontSize: 13,
               }}
             >
-              No holdings yet.{" "}
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
+                No investments tracked yet
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 380, margin: "0 auto 16px", lineHeight: 1.5 }}>
+                Log recurring buys by dollars or shares to track weighted cost basis, live quotes, and contributions per pay period.
+              </div>
               <button
                 type="button"
                 onClick={() => setLogBuyOpen(true)}
+                className="tap-target"
                 style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--accent-link)",
-                  fontWeight: 600,
-                  cursor: "pointer",
+                  padding: "10px 18px",
+                  background: "var(--accent-strong)",
+                  border: "1px solid var(--accent)",
+                  borderRadius: 8,
+                  color: "var(--accent-text)",
                   fontSize: 13,
-                  padding: 0,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  minHeight: 44,
                 }}
               >
-                Log your first buy
+                + Log your first buy
               </button>
             </div>
           )

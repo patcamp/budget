@@ -88,7 +88,8 @@ export default function PayPeriodPicker({ periods, selectedId, onSelect, onCreat
         <select
           value={selectedId ?? ""}
           onChange={(e) => onSelect(e.target.value)}
-          style={selectStyle}
+          className="tap-target"
+          style={{ ...selectStyle, minHeight: 44 }}
           aria-label="Pay period"
         >
           {periods.length === 0 && <option value="">No periods</option>}
@@ -99,7 +100,13 @@ export default function PayPeriodPicker({ periods, selectedId, onSelect, onCreat
             </option>
           ))}
         </select>
-        <button onClick={onCreateNext} disabled={busy || periods.length === 0} style={newBtnStyle} aria-label="New pay period">
+        <button
+          onClick={onCreateNext}
+          disabled={busy || periods.length === 0}
+          className="tap-target"
+          style={{ ...newBtnStyle, minHeight: 44 }}
+          aria-label="New pay period"
+        >
           + New
         </button>
       </div>

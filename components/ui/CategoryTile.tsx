@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { deleteExpense, updateExpense } from "@/components/api/expenses";
 import { Category, Expense } from "@/lib/types";
+import { useToast } from "./Toast";
 
 interface Props {
   category: Category;
@@ -28,6 +29,7 @@ const editInputStyle: React.CSSProperties = {
 };
 
 export default function CategoryTile({ category, categories, actual, expenses, locked, onChanged }: Props) {
+  const toast = useToast();
   const [expanded, setExpanded] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -48,9 +50,10 @@ export default function CategoryTile({ category, categories, actual, expenses, l
     const err = await deleteExpense(id);
     setDeletingId(null);
     if (err) {
-      alert(`Failed to delete: ${err}`);
+      toast.error(`Failed to delete expense: ${err}`);
       return;
     }
+    toast.success("Expense deleted.");
     await onChanged();
   }
 
@@ -68,7 +71,10 @@ export default function CategoryTile({ category, categories, actual, expenses, l
 
   async function handleSaveEdit(id: string) {
     const numAmount = parseFloat(editAmount);
-    if (!editCategoryId || isNaN(numAmount) || numAmount === 0 || !editDate) return;
+    if (!editCategoryId || isNaN(numAmount) || numAmount === 0 || !editDate) {
+      toast.error("Enter a valid category, non-zero amount, and date.");
+      return;
+    }
 
     setSaving(true);
     const err = await updateExpense(id, {
@@ -80,10 +86,11 @@ export default function CategoryTile({ category, categories, actual, expenses, l
     setSaving(false);
 
     if (err) {
-      alert(`Failed to save changes: ${err}`);
+      toast.error(`Failed to save changes: ${err}`);
       return;
     }
     setEditingId(null);
+    toast.success("Expense updated.");
     await onChanged();
   }
 
@@ -197,6 +204,7 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                         <button
                           onClick={() => handleSaveEdit(e.id)}
                           disabled={saving}
+                          className="tap-target"
                           style={{
                             background: "var(--accent-strong)",
                             border: "1px solid var(--accent)",
@@ -213,6 +221,7 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                         <button
                           onClick={cancelEdit}
                           disabled={saving}
+                          className="tap-target"
                           style={{
                             background: "transparent",
                             border: "1px solid var(--border)",
@@ -249,8 +258,8 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                       <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>{fmt(Number(e.amount))}</span>
                       {e.description && <span> — {e.description}</span>}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ color: "var(--text-faint)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ color: "var(--text-faint)", marginRight: 4 }}>
                         {new Date(e.expense_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
                       {!locked && (
@@ -260,13 +269,19 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                               ev.stopPropagation();
                               startEdit(e);
                             }}
+                            className="tap-target"
+                            aria-label="Edit expense"
                             style={{
                               background: "transparent",
                               border: "none",
                               color: "var(--text-faint)",
                               cursor: "pointer",
-                              fontSize: 12,
-                              padding: "2px 4px",
+                              fontSize: 13,
+                              padding: "4px 6px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 6,
                             }}
                             title="Edit"
                           >
@@ -278,13 +293,20 @@ export default function CategoryTile({ category, categories, actual, expenses, l
                               handleDelete(e.id);
                             }}
                             disabled={deletingId === e.id}
+                            className="tap-target"
+                            aria-label="Delete expense"
                             style={{
                               background: "transparent",
                               border: "none",
-                              color: "#7F1D1D",
+                              color: "#F87171",
                               cursor: "pointer",
-                              fontSize: 13,
-                              padding: "2px 4px",
+                              fontSize: 16,
+                              padding: "4px 6px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 6,
+                              opacity: deletingId === e.id ? 0.4 : 1,
                             }}
                             title="Delete"
                           >

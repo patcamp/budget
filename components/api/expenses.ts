@@ -13,6 +13,17 @@ export async function addExpense(payload: AddExpensePayload): Promise<string | n
   return error?.message ?? null;
 }
 
+export async function addExpensesBulk(payloads: AddExpensePayload[]): Promise<string | null> {
+  if (payloads.length === 0) return null;
+  const CHUNK_SIZE = 200;
+  for (let i = 0; i < payloads.length; i += CHUNK_SIZE) {
+    const chunk = payloads.slice(i, i + CHUNK_SIZE);
+    const { error } = await supabase.from("expenses").insert(chunk);
+    if (error) return error.message;
+  }
+  return null;
+}
+
 export async function deleteExpense(id: string): Promise<string | null> {
   const { error } = await supabase.from("expenses").delete().eq("id", id);
   return error?.message ?? null;

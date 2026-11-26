@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { PayPeriod, Category, Expense } from "@/lib/types";
 import { toLocalDateString } from "@/lib/dates";
 import PeriodFilter from "./PeriodFilter";
+import { useToast } from "./Toast";
 
 interface Props {
   payPeriods: PayPeriod[];
@@ -73,6 +75,7 @@ function downloadTransactionsCsv(
 }
 
 export default function Overview({ payPeriods, categories, expenses, selectedIds, onSelectedIdsChange }: Props) {
+  const toast = useToast();
   const sortedPeriods = useMemo(
     () => [...payPeriods].sort((a, b) => a.start_date.localeCompare(b.start_date)),
     [payPeriods]
@@ -145,8 +148,12 @@ export default function Overview({ payPeriods, categories, expenses, selectedIds
           <PeriodFilter periods={sortedPeriods} selectedIds={selectedIds} onChange={onSelectedIdsChange} />
 
           <button
-            onClick={() => downloadTransactionsCsv(selectedExpenses, categories, sortedPeriods)}
+            onClick={() => {
+              downloadTransactionsCsv(selectedExpenses, categories, sortedPeriods);
+              toast.success(`Exported ${selectedExpenses.length} transaction${selectedExpenses.length === 1 ? "" : "s"} to CSV.`);
+            }}
             disabled={selectedExpenses.length === 0}
+            className="tap-target"
             style={{
               background: selectedExpenses.length === 0 ? "var(--bg-panel)" : "var(--accent-strong)",
               border: `1px solid ${selectedExpenses.length === 0 ? "var(--border)" : "var(--accent)"}`,
@@ -168,14 +175,58 @@ export default function Overview({ payPeriods, categories, expenses, selectedIds
 
       <div style={{ padding: "16px 16px 80px" }}>
         {sortedPeriods.length === 0 && (
-          <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--text-muted)" }}>
-            No pay periods yet. Run the seed SQL or create one to get started.
+          <div style={{ background: "var(--bg-panel)", border: "1px dashed var(--border-strong)", borderRadius: 14, padding: 28, textAlign: "center" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>No pay periods yet</div>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 380, margin: "0 auto 16px" }}>
+              Create your first pay period on the This Period tab to see multi-period averages and trends here.
+            </div>
+            <Link
+              href="/"
+              className="tap-target"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "10px 18px",
+                borderRadius: 8,
+                border: "1px solid var(--accent)",
+                background: "var(--accent-strong)",
+                color: "var(--accent-text)",
+                fontSize: 13,
+                fontWeight: 700,
+                textDecoration: "none",
+                minHeight: 44,
+              }}
+            >
+              Go to This Period
+            </Link>
           </div>
         )}
 
         {sortedPeriods.length > 0 && selectedCount === 0 && (
-          <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--text-muted)" }}>
-            Select at least one pay period above.
+          <div style={{ background: "var(--bg-panel)", border: "1px dashed var(--border-strong)", borderRadius: 14, padding: 28, textAlign: "center" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>No periods selected</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>
+              Pick one or more pay periods above to compare income, spending, and over-budget trends.
+            </div>
+            <button
+              type="button"
+              onClick={() => onSelectedIdsChange(sortedPeriods.map((p) => p.id))}
+              className="tap-target"
+              style={{
+                padding: "9px 16px",
+                borderRadius: 8,
+                border: "1px solid var(--accent)",
+                background: "var(--accent-strong)",
+                color: "var(--accent-text)",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                minHeight: 44,
+              }}
+            >
+              Select All Periods
+            </button>
           </div>
         )}
 

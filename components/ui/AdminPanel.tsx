@@ -1,21 +1,30 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { upsertPaycheckConfig, applyConfigToOpenPeriods, applyHourlyConfigToOpenPeriods } from "@/components/api/admin";
 import { updatePayPeriod, deletePayPeriodWithExpenses } from "@/components/api/periods";
 import { addCategory, updateCategory, deleteCategory } from "@/components/api/categories";
+import {
+  addRecurringExpense,
+  addRecurringExpensesBulk,
+  updateRecurringExpense,
+  deleteRecurringExpense,
+} from "@/components/api/recurring";
 import { updateProfile } from "@/components/api/auth";
 import { hourlyGross, nightRate, computeBreakdown } from "@/lib/paycheck";
-import { PaycheckConfig, Account, PayPeriod, Category, Expense, Profile } from "@/lib/types";
+import { PaycheckConfig, Account, PayPeriod, Category, Expense, RecurringExpense, Profile } from "@/lib/types";
 import { THEMES } from "@/lib/themes";
+import { useToast } from "./Toast";
 
-type AdminTab = "paycheck" | "periods" | "categories" | "profile" | "theme";
+type AdminTab = "paycheck" | "periods" | "categories" | "recurring" | "profile" | "theme";
 
 interface Props {
   config: PaycheckConfig | null;
   payPeriods: PayPeriod[];
   categories: Category[];
   expenses: Expense[];
+  recurringExpenses: RecurringExpense[];
   profile: Profile | null;
   onRefresh: () => Promise<void>;
 }
@@ -180,7 +189,8 @@ function PreviewRow({ label, value, color = "var(--text-muted)", bold = false, i
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AdminPanel({ config, payPeriods, categories, expenses, profile, onRefresh }: Props) {
+export default function AdminPanel({ config, payPeriods, categories, expenses, recurringExpenses, profile, onRefresh }: Props) {
+  const toast = useToast();
   const [adminTab, setAdminTab] = useState<AdminTab>("paycheck");
 
   // ── Profile state ───────────────────────────────────────────────────────────
@@ -242,6 +252,26 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
   const [addingCategory, setAddingCategory] = useState(false);
   const [newCategory, setNewCategory] = useState({ name: "", budget_per_period: "", is_fixed: false, color: "#3B82F6", note: "" });
 
+  // ── Recurring expenses state ────────────────────────────────────────────────
+  const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
+  const [recurringDraft, setRecurringDraft] = useState({
+    category_id: "",
+    description: "",
+    amount: "",
+    day_of_period: "1",
+    active: true,
+  });
+  const [confirmDeleteRecurringId, setConfirmDeleteRecurringId] = useState<string | null>(null);
+  const [recurringBusy, setRecurringBusy] = useState(false);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
+  const [addingRecurring, setAddingRecurring] = useState(false);
+  const [newRecurring, setNewRecurring] = useState({
+    category_id: "",
+    description: "",
+    amount: "",
+    day_of_period: "1",
+  });
+
   // ── Derived ─────────────────────────────────────────────────────────────────
   const expenseCountByPeriod = useMemo(() => {
     const map: Record<string, number> = {};
@@ -264,6 +294,37 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
     () => [...categories].sort((a, b) => a.sort_order - b.sort_order),
     [categories]
   );
+
+  const categoryById = useMemo(() => {
+    const map: Record<string, Category> = {};
+    for (const c of categories) map[c.id] = c;
+    return map;
+  }, [categories]);
+
+  const recurringCountByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const r of recurringExpenses) {
+      if (r.active) map[r.category_id] = (map[r.category_id] || 0) + 1;
+    }
+    return map;
+  }, [recurringExpenses]);
+
+  const sortedRecurring = useMemo(
+    () => [...recurringExpenses].sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at)),
+    [recurringExpenses]
+  );
+
+  const activeRecurringTotal = useMemo(
+    () => sortedRecurring.filter((r) => r.active).reduce((sum, r) => sum + Number(r.amount), 0),
+    [sortedRecurring]
+  );
+
+  const seedableFixedCategories = useMemo(() => {
+    const covered = new Set(recurringExpenses.map((r) => r.category_id));
+    return sortedCategories.filter(
+      (c) => c.is_fixed && Number(c.budget_per_period) > 0 && !covered.has(c.id)
+    );
+  }, [sortedCategories, recurringExpenses]);
 
   // ── Paycheck handlers ────────────────────────────────────────────────────────
   function setField<K extends keyof FormState>(key: K, val: FormState[K]) {
@@ -309,8 +370,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
       ? await applyHourlyConfigToOpenPeriods(payload)
       : await applyConfigToOpenPeriods(amounts.gross, amounts.spending, allocs);
     setPaycheckBusy(false);
-    if (ppErr) { setPaycheckStatus({ msg: `Config saved but failed to update open periods: ${ppErr}`, ok: false }); return; }
+    if (ppErr) { setPaycheckStatus({ msg: `Config saved but failed to update open periods: ${ppErr}`, ok: false }); toast.error(`Config saved, open periods failed: ${ppErr}`); return; }
     setPaycheckStatus({ msg: "Saved and applied to all open periods.", ok: true });
+    toast.success("Paycheck settings saved.");
     await onRefresh();
   }
 
@@ -338,8 +400,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
     setPeriodBusy(true);
     const err = await updatePayPeriod(id, payload);
     setPeriodBusy(false);
-    if (err) { setPeriodError(err); return; }
+    if (err) { setPeriodError(err); toast.error(err); return; }
     setEditingPeriodId(null);
+    toast.success("Pay period updated.");
     await onRefresh();
   }
 
@@ -347,8 +410,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
     setPeriodBusy(true);
     const err = await deletePayPeriodWithExpenses(id);
     setPeriodBusy(false);
-    if (err) { setPeriodError(err); return; }
+    if (err) { setPeriodError(err); toast.error(err); return; }
     setConfirmDeletePeriodId(null);
+    toast.success("Pay period deleted.");
     await onRefresh();
   }
 
@@ -380,8 +444,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
       note: categoryDraft.note.trim() || null,
     });
     setCategoryBusy(false);
-    if (err) { setCategoryError(err); return; }
+    if (err) { setCategoryError(err); toast.error(err); return; }
     setEditingCategoryId(null);
+    toast.success("Category updated.");
     await onRefresh();
   }
 
@@ -389,8 +454,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
     setCategoryBusy(true);
     const err = await deleteCategory(id);
     setCategoryBusy(false);
-    if (err) { setCategoryError(err); return; }
+    if (err) { setCategoryError(err); toast.error(err); return; }
     setConfirmDeleteCategoryId(null);
+    toast.success("Category deleted.");
     await onRefresh();
   }
 
@@ -410,9 +476,131 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
       archived: false,
     });
     setCategoryBusy(false);
-    if (err) { setCategoryError(err); return; }
+    if (err) { setCategoryError(err); toast.error(err); return; }
     setNewCategory({ name: "", budget_per_period: "", is_fixed: false, color: "#3B82F6", note: "" });
     setAddingCategory(false);
+    toast.success("Category added.");
+    await onRefresh();
+  }
+
+  // ── Recurring expense handlers ───────────────────────────────────────────────
+  function startAddRecurring(prefillCategoryId?: string) {
+    const cat = prefillCategoryId
+      ? categoryById[prefillCategoryId]
+      : sortedCategories.find((c) => c.is_fixed) ?? sortedCategories[0];
+    setNewRecurring({
+      category_id: cat?.id ?? "",
+      description: cat?.is_fixed ? cat.name : "",
+      amount: cat && Number(cat.budget_per_period) > 0 ? String(Number(cat.budget_per_period)) : "",
+      day_of_period: "1",
+    });
+    setRecurringError(null);
+    setAddingRecurring(true);
+  }
+
+  function startEditRecurring(r: RecurringExpense) {
+    setEditingRecurringId(r.id);
+    setRecurringDraft({
+      category_id: r.category_id,
+      description: r.description,
+      amount: String(Number(r.amount)),
+      day_of_period: String(Math.max(1, Number(r.day_offset) + 1)),
+      active: r.active,
+    });
+    setRecurringError(null);
+  }
+
+  async function handleAddRecurring() {
+    const amount = parseFloat(newRecurring.amount);
+    const day = parseInt(newRecurring.day_of_period, 10);
+    if (!newRecurring.category_id) { setRecurringError("Category is required."); return; }
+    if (!newRecurring.description.trim()) { setRecurringError("Description is required."); return; }
+    if (isNaN(amount) || amount <= 0) { setRecurringError("Amount must be greater than 0."); return; }
+    if (isNaN(day) || day < 1 || day > 31) { setRecurringError("Day of period must be between 1 and 31."); return; }
+
+    const maxSort = sortedRecurring.reduce((m, r) => Math.max(m, r.sort_order), 0);
+    setRecurringBusy(true);
+    setRecurringError(null);
+    const err = await addRecurringExpense({
+      category_id: newRecurring.category_id,
+      description: newRecurring.description.trim(),
+      amount: Number(amount.toFixed(2)),
+      day_offset: day - 1,
+      active: true,
+      sort_order: maxSort + 1,
+    });
+    setRecurringBusy(false);
+    if (err) { setRecurringError(err); toast.error(err); return; }
+    setAddingRecurring(false);
+    toast.success("Recurring expense added.");
+    await onRefresh();
+  }
+
+  async function saveRecurring(id: string) {
+    const amount = parseFloat(recurringDraft.amount);
+    const day = parseInt(recurringDraft.day_of_period, 10);
+    if (!recurringDraft.category_id) { setRecurringError("Category is required."); return; }
+    if (!recurringDraft.description.trim()) { setRecurringError("Description is required."); return; }
+    if (isNaN(amount) || amount <= 0) { setRecurringError("Amount must be greater than 0."); return; }
+    if (isNaN(day) || day < 1 || day > 31) { setRecurringError("Day of period must be between 1 and 31."); return; }
+
+    setRecurringBusy(true);
+    setRecurringError(null);
+    const err = await updateRecurringExpense(id, {
+      category_id: recurringDraft.category_id,
+      description: recurringDraft.description.trim(),
+      amount: Number(amount.toFixed(2)),
+      day_offset: day - 1,
+      active: recurringDraft.active,
+    });
+    setRecurringBusy(false);
+    if (err) { setRecurringError(err); toast.error(err); return; }
+    setEditingRecurringId(null);
+    toast.success("Recurring expense updated.");
+    await onRefresh();
+  }
+
+  async function toggleRecurringActive(r: RecurringExpense) {
+    setRecurringBusy(true);
+    setRecurringError(null);
+    const err = await updateRecurringExpense(r.id, { active: !r.active });
+    setRecurringBusy(false);
+    if (err) { setRecurringError(err); toast.error(err); return; }
+    toast.success(!r.active ? `"${r.description}" enabled.` : `"${r.description}" paused.`);
+    await onRefresh();
+  }
+
+  async function confirmDeleteRecurring(id: string) {
+    setRecurringBusy(true);
+    setRecurringError(null);
+    const err = await deleteRecurringExpense(id);
+    setRecurringBusy(false);
+    if (err) { setRecurringError(err); toast.error(err); return; }
+    setConfirmDeleteRecurringId(null);
+    toast.success("Recurring expense removed.");
+    await onRefresh();
+  }
+
+  async function handleSeedFromFixedCategories() {
+    if (seedableFixedCategories.length === 0) return;
+    const maxSort = sortedRecurring.reduce((m, r) => Math.max(m, r.sort_order), 0);
+    setRecurringBusy(true);
+    setRecurringError(null);
+    const err = await addRecurringExpensesBulk(
+      seedableFixedCategories.map((c, idx) => ({
+        category_id: c.id,
+        description: c.name,
+        amount: Number(Number(c.budget_per_period).toFixed(2)),
+        day_offset: 0,
+        active: true,
+        sort_order: maxSort + idx + 1,
+      }))
+    );
+    setRecurringBusy(false);
+    if (err) { setRecurringError(err); toast.error(err); return; }
+    toast.success(
+      `Added ${seedableFixedCategories.length} recurring expense${seedableFixedCategories.length === 1 ? "" : "s"} from fixed categories.`
+    );
     await onRefresh();
   }
 
@@ -430,8 +618,9 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
       company: profileDraft.company.trim() || null,
     });
     setProfileBusy(false);
-    if (err) { setProfileStatus({ msg: `Failed to save: ${err}`, ok: false }); return; }
+    if (err) { setProfileStatus({ msg: `Failed to save: ${err}`, ok: false }); toast.error(`Failed to save profile: ${err}`); return; }
     setProfileStatus({ msg: "Profile saved.", ok: true });
+    toast.success("Profile saved.");
     await onRefresh();
   }
 
@@ -447,7 +636,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
     setThemeStatus(null);
     const err = await updateProfile(profile.id, { theme: themeId });
     setThemeBusy(null);
-    if (err) { setThemeStatus({ msg: `Failed to save: ${err}`, ok: false }); return; }
+    if (err) { setThemeStatus({ msg: `Failed to save: ${err}`, ok: false }); toast.error(`Failed to save theme: ${err}`); return; }
     await onRefresh();
   }
 
@@ -456,6 +645,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
     { key: "paycheck", label: "Paycheck" },
     { key: "periods", label: "Pay Periods" },
     { key: "categories", label: "Categories" },
+    { key: "recurring", label: "Recurring" },
     { key: "profile", label: "Profile" },
     { key: "theme", label: "Theme" },
   ];
@@ -472,7 +662,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Admin</div>
-        <div style={{ fontSize: 12, color: "var(--text-faint)" }}>Manage paycheck settings, pay periods, and spending categories.</div>
+        <div style={{ fontSize: 12, color: "var(--text-faint)" }}>Manage paycheck settings, pay periods, categories, and recurring expenses.</div>
       </div>
 
       {/* Sub-tabs */}
@@ -482,6 +672,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
             <button
               key={t.key}
               onClick={() => setAdminTab(t.key)}
+              className="tap-target"
               style={{
                 padding: "9px 18px",
                 border: "none",
@@ -512,6 +703,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                   <button
                     key={pt}
                     onClick={() => setField("pay_type", pt)}
+                    className="tap-target"
                     style={{
                       padding: "7px 18px",
                       borderRadius: 7,
@@ -617,6 +809,8 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                       <span style={{ fontSize: 10, color: "var(--text-faint)", padding: "0 6px", flexShrink: 0 }}>%</span>
                     </div>
                     <button onClick={() => { setAccounts((p) => p.filter((a) => a.id !== acct.id)); setPaycheckStatus(null); }}
+                      className="tap-target"
+                      aria-label="Remove account"
                       style={{ background: "none", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-faint)", fontSize: 14, cursor: "pointer", width: 28, height: 32, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>×</button>
                   </div>
                 ))}
@@ -631,6 +825,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
               </div>
               </div>
               <button onClick={() => { setAccounts((p) => [...p, { id: crypto.randomUUID(), name: "", type: "other", pct: 0 }]); setPaycheckStatus(null); }}
+                className="tap-target"
                 style={{ background: "none", border: "1px dashed var(--border-strong)", borderRadius: 8, color: "var(--text-muted)", fontSize: 12, padding: "8px 16px", cursor: "pointer", width: "100%", textAlign: "center" }}>
                 + Add Account
               </button>
@@ -724,7 +919,32 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
             </div>
           )}
           {sortedPeriods.length === 0 && (
-            <div style={{ ...panelStyle, textAlign: "center", color: "var(--text-faint)", fontSize: 13 }}>No pay periods yet.</div>
+            <div style={{ ...panelStyle, textAlign: "center", padding: 28 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>No pay periods yet</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>
+                Create your first pay period on the This Period tab to begin tracking.
+              </div>
+              <Link
+                href="/"
+                className="tap-target"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "9px 16px",
+                  borderRadius: 8,
+                  border: "1px solid var(--accent)",
+                  background: "var(--accent-strong)",
+                  color: "var(--accent-text)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                  minHeight: 44,
+                }}
+              >
+                Go to This Period
+              </Link>
+            </div>
           )}
           {sortedPeriods.length > 0 && (
             <div style={panelStyle}>
@@ -765,10 +985,12 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <button onClick={() => savePeriod(p.id)} disabled={periodBusy}
+                          className="tap-target"
                           style={{ padding: "6px 16px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 6, color: "var(--accent-text)", fontSize: 12, fontWeight: 600, cursor: periodBusy ? "wait" : "pointer" }}>
                           {periodBusy ? "Saving…" : "Save"}
                         </button>
                         <button onClick={() => { setEditingPeriodId(null); setPeriodError(null); }}
+                          className="tap-target"
                           style={{ padding: "6px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>
                           Cancel
                         </button>
@@ -785,10 +1007,12 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                         {expCount > 0 && <span style={{ color: "var(--warning-text)" }}> This will also delete {expCount} expense{expCount !== 1 ? "s" : ""}.</span>}
                       </span>
                       <button onClick={() => confirmDeletePeriod(p.id)} disabled={periodBusy}
+                        className="tap-target"
                         style={{ padding: "5px 14px", background: "#7F1D1D", border: "1px solid #EF4444", borderRadius: 6, color: "#FCA5A5", fontSize: 12, fontWeight: 600, cursor: periodBusy ? "wait" : "pointer" }}>
                         {periodBusy ? "Deleting…" : "Delete"}
                       </button>
                       <button onClick={() => setConfirmDeletePeriodId(null)}
+                        className="tap-target"
                         style={{ padding: "5px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>
                         Cancel
                       </button>
@@ -814,11 +1038,13 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                     <div style={{ display: "flex", gap: 6 }}>
                       {/* Locked periods are write-protected by DB triggers — unlock on the This Period tab first. */}
                       <button onClick={() => startEditPeriod(p)} disabled={p.is_locked}
+                        className="tap-target"
                         title={p.is_locked ? "Unlock this period on the This Period tab to edit it" : undefined}
                         style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: p.is_locked ? "var(--text-faint)" : "var(--text-muted)", fontSize: 11, cursor: p.is_locked ? "not-allowed" : "pointer" }}>
                         Edit
                       </button>
                       <button onClick={() => { setConfirmDeletePeriodId(p.id); setPeriodError(null); }} disabled={p.is_locked}
+                        className="tap-target"
                         title={p.is_locked ? "Unlock this period on the This Period tab to delete it" : undefined}
                         style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: p.is_locked ? "var(--text-faint)" : "var(--danger-text)", fontSize: 11, cursor: p.is_locked ? "not-allowed" : "pointer" }}>
                         Delete
@@ -898,10 +1124,12 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={() => saveCategory(c.id)} disabled={categoryBusy}
+                        className="tap-target"
                         style={{ padding: "6px 16px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 6, color: "var(--accent-text)", fontSize: 12, fontWeight: 600, cursor: categoryBusy ? "wait" : "pointer" }}>
                         {categoryBusy ? "Saving…" : "Save"}
                       </button>
                       <button onClick={() => { setEditingCategoryId(null); setCategoryError(null); }}
+                        className="tap-target"
                         style={{ padding: "6px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>
                         Cancel
                       </button>
@@ -913,12 +1141,14 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
               if (isConfirmDelete) {
                 return (
                   <div key={c.id} style={{ padding: "14px 0", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 12, color: "var(--danger-text)" }}>Delete "{c.name}"? This cannot be undone.</span>
+                    <span style={{ fontSize: 12, color: "var(--danger-text)" }}>Delete &ldquo;{c.name}&rdquo;? This cannot be undone.</span>
                     <button onClick={() => confirmDeleteCategory(c.id)} disabled={categoryBusy}
+                      className="tap-target"
                       style={{ padding: "5px 14px", background: "#7F1D1D", border: "1px solid #EF4444", borderRadius: 6, color: "#FCA5A5", fontSize: 12, fontWeight: 600, cursor: categoryBusy ? "wait" : "pointer" }}>
                       {categoryBusy ? "Deleting…" : "Delete"}
                     </button>
                     <button onClick={() => setConfirmDeleteCategoryId(null)}
+                      className="tap-target"
                       style={{ padding: "5px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>
                       Cancel
                     </button>
@@ -926,11 +1156,32 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                 );
               }
 
+              const recCount = recurringCountByCategory[c.id] || 0;
+
               return (
                 <div key={c.id} className="admin-row categories-columns">
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div style={{ width: 20, height: 20, borderRadius: 5, background: c.color, border: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }} />
                     <span style={{ fontSize: 13, color: "var(--text-body)", fontWeight: 500 }}>{c.name}</span>
+                    {recCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminTab("recurring")}
+                        title="Auto-inserted on new pay periods — manage in Recurring"
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: "var(--accent-link)",
+                          background: "var(--bg-panel-alt)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 999,
+                          padding: "2px 7px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        ↻ {recCount} auto
+                      </button>
+                    )}
                   </div>
                   <div data-label="Type" style={{ fontSize: 11, color: c.is_fixed ? "var(--purple-text)" : "var(--text-muted)" }}>{c.is_fixed ? "Fixed" : "Variable"}</div>
                   <div data-label="Budget" style={{ fontSize: 13, color: "var(--text-muted)" }}>{fmtMoney(Number(c.budget_per_period))}</div>
@@ -940,12 +1191,14 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button onClick={() => startEditCategory(c)}
+                      className="tap-target"
                       style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", fontSize: 11, cursor: "pointer" }}>
                       Edit
                     </button>
                     <button
                       onClick={() => canDelete ? (setConfirmDeleteCategoryId(c.id), setCategoryError(null)) : undefined}
                       disabled={!canDelete}
+                      className="tap-target"
                       title={!canDelete ? `Cannot delete — ${txnCount} transaction${txnCount !== 1 ? "s" : ""} exist` : "Delete category"}
                       style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: canDelete ? "var(--danger-text)" : "var(--text-faint)", fontSize: 11, cursor: canDelete ? "pointer" : "not-allowed", opacity: canDelete ? 1 : 0.4 }}>
                       Delete
@@ -960,6 +1213,7 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
             {/* Add category */}
             {!addingCategory ? (
               <button onClick={() => { setAddingCategory(true); setCategoryError(null); }}
+                className="tap-target"
                 style={{ marginTop: 14, background: "none", border: "1px dashed var(--border-strong)", borderRadius: 8, color: "var(--text-muted)", fontSize: 12, padding: "9px 16px", cursor: "pointer", width: "100%", textAlign: "center" }}>
                 + Add Category
               </button>
@@ -999,15 +1253,373 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={handleAddCategory} disabled={categoryBusy}
+                    className="tap-target"
                     style={{ padding: "7px 18px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 6, color: "var(--accent-text)", fontSize: 12, fontWeight: 600, cursor: categoryBusy ? "wait" : "pointer" }}>
                     {categoryBusy ? "Adding…" : "Add Category"}
                   </button>
                   <button onClick={() => { setAddingCategory(false); setCategoryError(null); setNewCategory({ name: "", budget_per_period: "", is_fixed: false, color: "#3B82F6", note: "" }); }}
+                    className="tap-target"
                     style={{ padding: "7px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>
                     Cancel
                   </button>
                 </div>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── RECURRING EXPENSES TAB ──────────────────────────────────────────── */}
+      {adminTab === "recurring" && (
+        <div>
+          {recurringError && (
+            <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: 12, color: "var(--danger-text)" }}>
+              {recurringError}
+            </div>
+          )}
+
+          <div style={panelStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Recurring / Fixed Expenses</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                  Active items are automatically inserted as editable expenses whenever you create a new pay period.
+                </div>
+                {sortedRecurring.length > 0 && (
+                  <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 6 }}>
+                    {sortedRecurring.filter((r) => r.active).length} active ·{" "}
+                    <span style={{ color: "var(--text)", fontWeight: 600 }}>{fmtMoney(activeRecurringTotal)}</span> / period
+                  </div>
+                )}
+              </div>
+              {seedableFixedCategories.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSeedFromFixedCategories}
+                  disabled={recurringBusy}
+                  className="tap-target"
+                  style={{
+                    padding: "8px 14px",
+                    background: "var(--bg-panel-alt)",
+                    border: "1px solid var(--border-strong)",
+                    borderRadius: 8,
+                    color: "var(--text)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: recurringBusy ? "wait" : "pointer",
+                    opacity: recurringBusy ? 0.6 : 1,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  + Seed {seedableFixedCategories.length} from Fixed Categories
+                </button>
+              )}
+            </div>
+
+            {sortedRecurring.length === 0 && !addingRecurring ? (
+              <div style={{ padding: "24px 12px", textAlign: "center", borderTop: "1px solid var(--border-soft)" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
+                  No recurring expenses yet
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-faint)", maxWidth: 420, margin: "0 auto 14px" }}>
+                  Add rent, loans, or subscriptions once and they&apos;ll populate automatically every time you start a new pay period.
+                </div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => startAddRecurring()}
+                    disabled={sortedCategories.length === 0}
+                    className="tap-target"
+                    style={{
+                      padding: "9px 16px",
+                      background: "var(--accent-strong)",
+                      border: "1px solid var(--accent)",
+                      borderRadius: 8,
+                      color: "var(--accent-text)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: sortedCategories.length === 0 ? "not-allowed" : "pointer",
+                      opacity: sortedCategories.length === 0 ? 0.5 : 1,
+                      minHeight: 44,
+                    }}
+                  >
+                    + Add Recurring Expense
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {sortedRecurring.length > 0 && (
+                  <div className="scroll-x">
+                    <div className="scroll-x-content">
+                      <div className="admin-table-header recurring-columns">
+                        {["Description", "Category", "Amount", "Default Date", "Status", ""].map((h) => (
+                          <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{h}</span>
+                        ))}
+                      </div>
+
+                      {sortedRecurring.map((r) => {
+                        const isEditing = editingRecurringId === r.id;
+                        const isConfirmDelete = confirmDeleteRecurringId === r.id;
+                        const cat = categoryById[r.category_id];
+
+                        if (isEditing) {
+                          return (
+                            <div key={r.id} style={{ padding: "14px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                              <div className="recurring-edit-columns" style={{ display: "grid", gap: 10, alignItems: "end", marginBottom: 10 }}>
+                                <div>
+                                  <label style={labelStyle}>Description</label>
+                                  <input
+                                    type="text"
+                                    value={recurringDraft.description}
+                                    onChange={(e) => setRecurringDraft((d) => ({ ...d, description: e.target.value }))}
+                                    style={inputStyle}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={labelStyle}>Category</label>
+                                  <select
+                                    value={recurringDraft.category_id}
+                                    onChange={(e) => setRecurringDraft((d) => ({ ...d, category_id: e.target.value }))}
+                                    style={{ ...selectStyle, width: "100%", boxSizing: "border-box" }}
+                                  >
+                                    {sortedCategories.map((c) => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={labelStyle}>Amount ($)</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    value={recurringDraft.amount}
+                                    onChange={(e) => setRecurringDraft((d) => ({ ...d, amount: e.target.value }))}
+                                    style={inputStyle}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={labelStyle}>Day of Period</label>
+                                  <input
+                                    type="number"
+                                    step="1"
+                                    min="1"
+                                    max="31"
+                                    value={recurringDraft.day_of_period}
+                                    onChange={(e) => setRecurringDraft((d) => ({ ...d, day_of_period: e.target.value }))}
+                                    style={inputStyle}
+                                  />
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                                <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={recurringDraft.active}
+                                    onChange={(e) => setRecurringDraft((d) => ({ ...d, active: e.target.checked }))}
+                                  />
+                                  Active (auto-insert on new pay periods)
+                                </label>
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <button
+                                    onClick={() => saveRecurring(r.id)}
+                                    disabled={recurringBusy}
+                                    className="tap-target"
+                                    style={{ padding: "6px 16px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 6, color: "var(--accent-text)", fontSize: 12, fontWeight: 600, cursor: recurringBusy ? "wait" : "pointer" }}
+                                  >
+                                    {recurringBusy ? "Saving…" : "Save"}
+                                  </button>
+                                  <button
+                                    onClick={() => { setEditingRecurringId(null); setRecurringError(null); }}
+                                    className="tap-target"
+                                    style={{ padding: "6px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (isConfirmDelete) {
+                          return (
+                            <div key={r.id} style={{ padding: "14px 0", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 12, color: "var(--danger-text)" }}>
+                                Remove recurring template &ldquo;{r.description}&rdquo;? Existing expenses won&apos;t be affected.
+                              </span>
+                              <button
+                                onClick={() => confirmDeleteRecurring(r.id)}
+                                disabled={recurringBusy}
+                                className="tap-target"
+                                style={{ padding: "5px 14px", background: "#7F1D1D", border: "1px solid #EF4444", borderRadius: 6, color: "#FCA5A5", fontSize: 12, fontWeight: 600, cursor: recurringBusy ? "wait" : "pointer" }}
+                              >
+                                {recurringBusy ? "Removing…" : "Remove"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteRecurringId(null)}
+                                className="tap-target"
+                                style={{ padding: "5px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={r.id} className="admin-row recurring-columns" style={{ opacity: r.active ? 1 : 0.6 }}>
+                            <div style={{ fontSize: 13, color: "var(--text-body)", fontWeight: 500 }}>
+                              {r.description}
+                            </div>
+                            <div data-label="Category" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}>
+                              <span style={{ width: 8, height: 8, borderRadius: "50%", background: cat?.color || "var(--text-faint)", flexShrink: 0 }} />
+                              <span>{cat?.name || "Unknown"}</span>
+                            </div>
+                            <div data-label="Amount" style={{ fontSize: 13, color: "var(--text)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                              {fmtMoney(Number(r.amount))}
+                            </div>
+                            <div data-label="Default Date" style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                              Day {Number(r.day_offset) + 1}
+                            </div>
+                            <div data-label="Status">
+                              <button
+                                type="button"
+                                onClick={() => toggleRecurringActive(r)}
+                                disabled={recurringBusy}
+                                className="tap-target"
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  color: r.active ? "var(--success-text)" : "var(--text-muted)",
+                                  background: r.active ? "var(--success-bg)" : "var(--bg-page)",
+                                  border: `1px solid ${r.active ? "var(--success-border)" : "var(--border)"}`,
+                                  borderRadius: 5,
+                                  padding: "4px 8px",
+                                  cursor: recurringBusy ? "wait" : "pointer",
+                                }}
+                              >
+                                {r.active ? "Active" : "Paused"}
+                              </button>
+                            </div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button
+                                onClick={() => startEditRecurring(r)}
+                                className="tap-target"
+                                style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", fontSize: 11, cursor: "pointer" }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => { setConfirmDeleteRecurringId(r.id); setRecurringError(null); }}
+                                className="tap-target"
+                                style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--danger-text)", fontSize: 11, cursor: "pointer" }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {!addingRecurring ? (
+                  <button
+                    onClick={() => startAddRecurring()}
+                    disabled={sortedCategories.length === 0}
+                    className="tap-target"
+                    style={{ marginTop: 14, background: "none", border: "1px dashed var(--border-strong)", borderRadius: 8, color: "var(--text-muted)", fontSize: 12, padding: "9px 16px", cursor: sortedCategories.length === 0 ? "not-allowed" : "pointer", width: "100%", textAlign: "center" }}
+                  >
+                    + Add Recurring Expense
+                  </button>
+                ) : (
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 12 }}>
+                      New Recurring Expense
+                    </div>
+                    <div className="recurring-edit-columns" style={{ display: "grid", gap: 10, alignItems: "end", marginBottom: 12 }}>
+                      <div>
+                        <label style={labelStyle}>Description</label>
+                        <input
+                          type="text"
+                          value={newRecurring.description}
+                          placeholder="e.g. Rent, Truck Loan, Spotify"
+                          onChange={(e) => setNewRecurring((n) => ({ ...n, description: e.target.value }))}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Category</label>
+                        <select
+                          value={newRecurring.category_id}
+                          onChange={(e) => {
+                            const nextId = e.target.value;
+                            const cat = categoryById[nextId];
+                            setNewRecurring((n) => ({
+                              ...n,
+                              category_id: nextId,
+                              description: n.description || (cat ? cat.name : ""),
+                              amount: n.amount || (cat && Number(cat.budget_per_period) > 0 ? String(Number(cat.budget_per_period)) : ""),
+                            }));
+                          }}
+                          style={{ ...selectStyle, width: "100%", boxSizing: "border-box" }}
+                        >
+                          {sortedCategories.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Amount ($)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          placeholder="0.00"
+                          value={newRecurring.amount}
+                          onChange={(e) => setNewRecurring((n) => ({ ...n, amount: e.target.value }))}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Day of Period</label>
+                        <input
+                          type="number"
+                          step="1"
+                          min="1"
+                          max="31"
+                          value={newRecurring.day_of_period}
+                          onChange={(e) => setNewRecurring((n) => ({ ...n, day_of_period: e.target.value }))}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 12 }}>
+                      Day 1 = period start date (e.g. Day 1 inserts on the first day; higher days are clamped to the period end date).
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={handleAddRecurring}
+                        disabled={recurringBusy}
+                        className="tap-target"
+                        style={{ padding: "7px 18px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 6, color: "var(--accent-text)", fontSize: 12, fontWeight: 600, cursor: recurringBusy ? "wait" : "pointer" }}
+                      >
+                        {recurringBusy ? "Adding…" : "Add Recurring"}
+                      </button>
+                      <button
+                        onClick={() => { setAddingRecurring(false); setRecurringError(null); }}
+                        className="tap-target"
+                        style={{ padding: "7px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1042,7 +1654,8 @@ export default function AdminPanel({ config, payPeriods, categories, expenses, p
                   style={inputStyle} />
               </div>
               <button onClick={saveProfile} disabled={profileBusy}
-                style={{ padding: "10px 20px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 8, color: "var(--accent-text)", fontSize: 13, fontWeight: 700, cursor: profileBusy ? "wait" : "pointer", opacity: profileBusy ? 0.6 : 1 }}>
+                className="tap-target"
+                style={{ padding: "10px 20px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 8, color: "var(--accent-text)", fontSize: 13, fontWeight: 700, cursor: profileBusy ? "wait" : "pointer", opacity: profileBusy ? 0.6 : 1, minHeight: 44 }}>
                 {profileBusy ? "Saving…" : "Save Profile"}
               </button>
               {profileStatus && (
