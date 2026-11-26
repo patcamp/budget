@@ -40,6 +40,7 @@ export default function PeriodFilter({ periods, selectedIds, onChange }: Props) 
         <button
           key={preset.label}
           onClick={() => applyPreset(preset.count)}
+          className="tap-target"
           style={{
             padding: "8px 12px",
             borderRadius: 7,
@@ -49,7 +50,7 @@ export default function PeriodFilter({ periods, selectedIds, onChange }: Props) 
             fontSize: 12,
             fontWeight: 600,
             cursor: "pointer",
-            minHeight: 40,
+            minHeight: 44,
           }}
         >
           {preset.label}

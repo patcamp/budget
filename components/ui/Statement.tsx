@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { deleteExpense, updateExpense } from "@/components/api/expenses";
+import { matchesExpenseSearch } from "@/lib/pace";
 import { Category, Expense } from "@/lib/types";
+import { useToast } from "./Toast";
 
 interface Props {
   expenses: Expense[];
@@ -12,6 +14,8 @@ interface Props {
   noCard?: boolean;
   categoryFilter?: string;
   onCategoryFilterChange?: (val: string) => void;
+  onAddExpense?: () => void;
+  onImportCsv?: () => void;
 }
 
 function fmt(n: number) {
@@ -28,7 +32,18 @@ const editInputStyle: React.CSSProperties = {
   outline: "none",
 };
 
-export default function Statement({ expenses, categories, locked, onChanged, noCard = false, categoryFilter: controlledFilter, onCategoryFilterChange }: Props) {
+export default function Statement({
+  expenses,
+  categories,
+  locked,
+  onChanged,
+  noCard = false,
+  categoryFilter: controlledFilter,
+  onCategoryFilterChange,
+  onAddExpense,
+  onImportCsv,
+}: Props) {
+  const toast = useToast();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // Supports both controlled (Dashboard passes filter via props) and
   // uncontrolled (standalone usage) modes.
@@ -36,6 +51,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
   const categoryFilter = controlledFilter ?? internalFilter;
   const setCategoryFilter = onCategoryFilterChange ?? setInternalFilter;
 
+  const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editCategoryId, setEditCategoryId] = useState("");
   const [editAmount, setEditAmount] = useState("");
@@ -49,10 +65,17 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
     return map;
   }, [categories]);
 
-  const filteredExpenses = useMemo(
-    () => (categoryFilter === "all" ? expenses : expenses.filter((e) => e.category_id === categoryFilter)),
-    [expenses, categoryFilter]
-  );
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter((e) => {
+      if (categoryFilter !== "all" && e.category_id !== categoryFilter) return false;
+      if (searchQuery.trim() && !matchesExpenseSearch(e, categoryById[e.category_id]?.name, searchQuery)) {
+        return false;
+      }
+      return true;
+    });
+  }, [expenses, categoryFilter, searchQuery, categoryById]);
+
+  const hasActiveFilter = categoryFilter !== "all" || searchQuery.trim().length > 0;
 
   // Expenses sorted newest-first, then grouped by date for the statement view
   const expensesByDate = useMemo((): [string, Expense[]][] => {
@@ -74,9 +97,10 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
     const err = await deleteExpense(id);
     setDeletingId(null);
     if (err) {
-      alert(`Failed to delete: ${err}`);
+      toast.error(`Failed to delete expense: ${err}`);
       return;
     }
+    toast.success("Expense deleted.");
     await onChanged();
   }
 
@@ -94,7 +118,10 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
 
   async function handleSaveEdit(id: string) {
     const numAmount = parseFloat(editAmount);
-    if (!editCategoryId || isNaN(numAmount) || numAmount === 0 || !editDate) return;
+    if (!editCategoryId || isNaN(numAmount) || numAmount === 0 || !editDate) {
+      toast.error("Enter a valid category, non-zero amount, and date.");
+      return;
+    }
 
     setSaving(true);
     const err = await updateExpense(id, {
@@ -106,12 +133,139 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
     setSaving(false);
 
     if (err) {
-      alert(`Failed to save changes: ${err}`);
+      toast.error(`Failed to save changes: ${err}`);
       return;
     }
     setEditingId(null);
+    toast.success("Expense updated.");
     await onChanged();
   }
+
+  const searchBar = expenses.length > 0 && (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "10px 16px",
+        borderBottom: "1px solid var(--border-soft)",
+        background: "var(--bg-panel)",
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          background: "var(--bg-page)",
+          border: "1px solid var(--border)",
+          borderRadius: 7,
+          overflow: "hidden",
+        }}
+      >
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search description or amount…"
+          aria-label="Search statement by description or amount"
+          style={{
+            flex: 1,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-body)",
+            padding: "8px 10px",
+            fontSize: 12,
+            outline: "none",
+            minWidth: 0,
+          }}
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            aria-label="Clear search"
+            className="tap-target"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 16,
+              padding: "4px 10px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      {hasActiveFilter && (
+        <span style={{ fontSize: 11, color: "var(--text-faint)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+          {filteredExpenses.length} of {expenses.length}
+        </span>
+      )}
+    </div>
+  );
+
+  const emptyPeriodBlock = (
+    <div style={{ padding: "26px 16px", textAlign: "center" }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
+        No expenses yet this period
+      </div>
+      <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: !locked && (onAddExpense || onImportCsv) ? 14 : 0 }}>
+        {locked
+          ? "This period is locked with no recorded transactions."
+          : "Log an expense above or import a bank/card CSV to get started."}
+      </div>
+      {!locked && (onAddExpense || onImportCsv) && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+          {onAddExpense && (
+            <button
+              type="button"
+              onClick={onAddExpense}
+              className="show-mobile tap-target"
+              style={{
+                padding: "9px 14px",
+                borderRadius: 8,
+                border: "1px solid var(--accent)",
+                background: "var(--accent-strong)",
+                color: "var(--accent-text)",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                minHeight: 44,
+              }}
+            >
+              + Add Expense
+            </button>
+          )}
+          {onImportCsv && (
+            <button
+              type="button"
+              onClick={onImportCsv}
+              className="tap-target"
+              style={{
+                padding: "9px 14px",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+                background: "transparent",
+                color: "var(--text-muted)",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                minHeight: 44,
+              }}
+            >
+              ↑ Import CSV
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   const filterSelect = (
     <select
@@ -138,9 +292,34 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
 
   const rows = (
     <>
+      {searchBar}
       {expensesByDate.length === 0 && (
         <div style={{ padding: 24, textAlign: "center", color: "var(--text-faint)", fontSize: 12 }}>
-          No transactions in this category.
+          <div style={{ marginBottom: hasActiveFilter ? 10 : 0 }}>
+            No matching transactions{searchQuery.trim() ? ` for "${searchQuery.trim()}"` : " in this category"}.
+          </div>
+          {hasActiveFilter && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setCategoryFilter("all");
+              }}
+              className="tap-target"
+              style={{
+                padding: "7px 14px",
+                borderRadius: 7,
+                border: "1px solid var(--border)",
+                background: "transparent",
+                color: "var(--text-muted)",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       )}
       {expensesByDate.map(([date, items]) => {
@@ -218,6 +397,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                       <button
                         onClick={() => handleSaveEdit(expense.id)}
                         disabled={saving}
+                        className="tap-target"
                         style={{
                           background: "var(--accent-strong)",
                           border: "1px solid var(--accent)",
@@ -226,7 +406,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                           cursor: saving ? "wait" : "pointer",
                           fontSize: 11,
                           fontWeight: 600,
-                          padding: "6px 10px",
+                          padding: "6px 12px",
                         }}
                       >
                         Save
@@ -234,6 +414,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                       <button
                         onClick={cancelEdit}
                         disabled={saving}
+                        className="tap-target"
                         style={{
                           background: "transparent",
                           border: "1px solid var(--border)",
@@ -242,7 +423,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
                           cursor: "pointer",
                           fontSize: 11,
                           fontWeight: 600,
-                          padding: "6px 10px",
+                          padding: "6px 12px",
                         }}
                       >
                         Cancel
@@ -352,17 +533,7 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
   );
 
   if (noCard) {
-    return (
-      <div>
-        {expenses.length === 0 ? (
-          <div style={{ padding: 24, textAlign: "center", color: "var(--text-faint)", fontSize: 12 }}>
-            No transactions yet this period.
-          </div>
-        ) : (
-          rows
-        )}
-      </div>
-    );
+    return <div>{expenses.length === 0 ? emptyPeriodBlock : rows}</div>;
   }
 
   if (expenses.length === 0) {
@@ -372,13 +543,9 @@ export default function Statement({ expenses, categories, locked, onChanged, noC
           background: "var(--bg-panel)",
           border: "1px solid var(--border)",
           borderRadius: 14,
-          padding: 24,
-          textAlign: "center",
-          color: "var(--text-faint)",
-          fontSize: 12,
         }}
       >
-        No transactions yet this period.
+        {emptyPeriodBlock}
       </div>
     );
   }

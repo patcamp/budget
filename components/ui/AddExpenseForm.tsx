@@ -5,6 +5,7 @@ import { addExpense } from "@/components/api/expenses";
 import { clearDraft, readDraft, writeDraft } from "@/lib/draftStorage";
 import { Category } from "@/lib/types";
 import { toLocalDateString } from "@/lib/dates";
+import { useToast } from "./Toast";
 
 interface Props {
   payPeriodId: string;
@@ -117,6 +118,7 @@ export default function AddExpenseForm({
   autoFocusAmount = false,
   draft,
 }: Props) {
+  const toast = useToast();
   const {
     categoryId,
     amount,
@@ -164,12 +166,14 @@ export default function AddExpenseForm({
 
     if (err) {
       setError(err);
+      toast.error(`Failed to add expense: ${err}`);
       return;
     }
 
     clear();
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1500);
+    toast.success(`Added $${numAmount.toFixed(2)} expense.`);
     await onAdded();
     onClose?.();
   }
