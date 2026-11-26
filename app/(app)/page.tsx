@@ -6,7 +6,7 @@ import Dashboard from "@/components/ui/Dashboard";
 import { useBudgetData } from "./layout";
 
 export default function ThisPeriodPage() {
-  const { payPeriods, categories, expenses, profile, paycheckConfig, onRefresh } = useBudgetData();
+  const { payPeriods, categories, expenses, recurringExpenses, profile, paycheckConfig, onRefresh } = useBudgetData();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -66,6 +66,7 @@ export default function ThisPeriodPage() {
       payPeriods={payPeriods}
       categories={categories}
       expenses={expenses}
+      recurringExpenses={recurringExpenses}
       profile={profile}
       paycheckConfig={paycheckConfig}
       onRefresh={onRefresh}

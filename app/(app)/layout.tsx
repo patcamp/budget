@@ -8,6 +8,8 @@ import { setupNewUser } from "@/components/api/onboarding";
 import { getSession, onAuthChange, signOut, AuthSession } from "@/components/api/auth";
 import { isValidTheme } from "@/lib/themes";
 import AuthScreen from "@/components/ui/AuthScreen";
+import { ToastProvider } from "@/components/ui/Toast";
+import { AppLoadingSkeleton, AuthBootSkeleton } from "@/components/ui/LoadingSkeleton";
 
 interface BudgetData extends PageData {
   onRefresh: () => Promise<void>;
@@ -45,6 +47,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [paycheckConfig, setPaycheckConfig] = useState<PageData["paycheckConfig"]>(null);
   const [investments, setInvestments] = useState<PageData["investments"]>([]);
   const [investmentPurchases, setInvestmentPurchases] = useState<PageData["investmentPurchases"]>([]);
+  const [recurringExpenses, setRecurringExpenses] = useState<PageData["recurringExpenses"]>([]);
   const [profile, setProfile] = useState<PageData["profile"]>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setPaycheckConfig(pageData.paycheckConfig);
     setInvestments(pageData.investments);
     setInvestmentPurchases(pageData.investmentPurchases);
+    setRecurringExpenses(pageData.recurringExpenses);
     setProfile(pageData.profile);
     setLoading(false);
   }, []);
@@ -126,6 +130,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setPaycheckConfig(null);
       setInvestments([]);
       setInvestmentPurchases([]);
+      setRecurringExpenses([]);
       setProfile(null);
       setError(null);
       setLoading(false);
@@ -154,23 +159,68 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [profile]);
 
   if (!authReady) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
-        Loading…
-      </div>
-    );
+    return <AuthBootSkeleton />;
   }
 
   if (!session) {
     return <AuthScreen />;
   }
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
-        Loading your budget…
+  const displayName = profile?.full_name || session.user.email || "Account";
+
+  const navShell = (content: React.ReactNode) => (
+    <div className="app-shell">
+      <div
+        className="desktop-nav"
+        style={{ display: "flex", flexWrap: "wrap", alignItems: "center", background: "var(--bg-page)", borderBottom: "1px solid var(--border)" }}
+      >
+        {TABS.map((tab) => {
+          const active = tabActive(pathname, tab.href);
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className="header-tab"
+              data-active={active ? "true" : "false"}
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
+        <div className="header-user" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
+            {displayName}
+          </span>
+          <button
+            onClick={() => signOut()}
+            className="tap-target"
+            style={{ padding: "8px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0, minHeight: 36 }}
+          >
+            Sign out
+          </button>
+        </div>
       </div>
-    );
+
+      {content}
+
+      <nav className="bottom-nav" aria-label="Main">
+        {TABS.map((tab) => {
+          const active = tabActive(pathname, tab.href);
+          return (
+            <Link key={tab.href} href={tab.href} data-active={active ? "true" : "false"}>
+              <span className="nav-icon" aria-hidden>
+                {tab.icon}
+              </span>
+              {tab.short}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+  );
+
+  if (loading) {
+    return navShell(<AppLoadingSkeleton pathname={pathname} />);
   }
 
   if (error) {
@@ -182,79 +232,47 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           Check that NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set correctly, and that
           you&apos;ve run supabase/schema.sql (including the multi-user migration) in your Supabase project.
         </div>
-        <button
-          onClick={() => signOut()}
-          style={{ marginTop: 8, padding: "8px 18px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}
-        >
-          Sign out
-        </button>
+        <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap", justifyContent: "center" }}>
+          <button
+            onClick={() => {
+              setLoading(true);
+              loadAll();
+            }}
+            className="tap-target"
+            style={{ padding: "8px 18px", background: "var(--accent-strong)", border: "1px solid var(--accent)", borderRadius: 8, color: "var(--accent-text)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => signOut()}
+            className="tap-target"
+            style={{ padding: "8px 18px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}
+          >
+            Sign out
+          </button>
+        </div>
       </div>
     );
   }
 
-  const displayName = profile?.full_name || session.user.email || "Account";
-
   return (
-    <BudgetDataContext.Provider
-      value={{
-        payPeriods,
-        categories,
-        expenses,
-        paycheckConfig,
-        investments,
-        investmentPurchases,
-        profile,
-        error: null,
-        onRefresh: loadAll,
-      }}
-    >
-      <div className="app-shell">
-        <div
-          className="desktop-nav"
-          style={{ display: "flex", flexWrap: "wrap", alignItems: "center", background: "var(--bg-page)", borderBottom: "1px solid var(--border)" }}
-        >
-          {TABS.map((tab) => {
-            const active = tabActive(pathname, tab.href);
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className="header-tab"
-                data-active={active ? "true" : "false"}
-              >
-                {tab.label}
-              </Link>
-            );
-          })}
-          <div className="header-user" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
-              {displayName}
-            </span>
-            <button
-              onClick={() => signOut()}
-              style={{ padding: "8px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0, minHeight: 36 }}
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-
-        {children}
-
-        <nav className="bottom-nav" aria-label="Main">
-          {TABS.map((tab) => {
-            const active = tabActive(pathname, tab.href);
-            return (
-              <Link key={tab.href} href={tab.href} data-active={active ? "true" : "false"}>
-                <span className="nav-icon" aria-hidden>
-                  {tab.icon}
-                </span>
-                {tab.short}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-    </BudgetDataContext.Provider>
+    <ToastProvider>
+      <BudgetDataContext.Provider
+        value={{
+          payPeriods,
+          categories,
+          expenses,
+          paycheckConfig,
+          investments,
+          investmentPurchases,
+          recurringExpenses,
+          profile,
+          error: null,
+          onRefresh: loadAll,
+        }}
+      >
+        {navShell(children)}
+      </BudgetDataContext.Provider>
+    </ToastProvider>
   );
 }
