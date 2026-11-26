@@ -104,3 +104,16 @@ export interface InvestmentPurchase {
   notes: string | null;
   created_at: string;
 }
+
+/** Per-period recurring/fixed expense template auto-inserted when creating a pay period. */
+export interface RecurringExpense {
+  id: string;
+  user_id: string;
+  category_id: string;
+  description: string;
+  amount: number;
+  day_offset: number; // 0 = period start_date, clamped to period end_date
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+}

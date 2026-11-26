@@ -22,3 +22,17 @@ export function addDaysLocal(ymd: string, days: number): string {
   d.setDate(d.getDate() + days);
   return toLocalDateString(d);
 }
+
+/** Whole calendar days from `fromYmd` to `toYmd` (DST-safe via rounding). */
+export function daysBetweenLocal(fromYmd: string, toYmd: string): number {
+  const from = parseLocalDate(fromYmd);
+  const to = parseLocalDate(toYmd);
+  return Math.round((to.getTime() - from.getTime()) / 86_400_000);
+}
+
+/** Clamp a YYYY-MM-DD date inside `[minYmd, maxYmd]`. */
+export function clampDateLocal(ymd: string, minYmd: string, maxYmd: string): string {
+  if (ymd < minYmd) return minYmd;
+  if (ymd > maxYmd) return maxYmd;
+  return ymd;
+}
